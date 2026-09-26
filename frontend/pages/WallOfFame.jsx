@@ -1,0 +1,279 @@
+import { useState } from 'react';
+
+const FEED_ITEMS = [
+  {
+    id: 1,
+    filter: 'my-groups',
+    badge: 'Marathon Finisher',
+    badgeStyle: {},
+    name: 'Alex Rivero',
+    subtitle: 'Just finished my first solo skydive! • 1h ago',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
+    image: 'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces',
+    likes: 128,
+    comments: 24,
+    reactions: ['🔥', '⭐', '🙌'],
+    commentList: [
+      { name: 'Sarah Chen', color: 'text-secondary', text: 'Amazing job, you crushed it! 🚀' },
+      { name: 'Marco Polo', color: 'text-primary', text: "Total inspiration. Which one's next? 🌏" },
+    ],
+  },
+  {
+    id: 2,
+    filter: 'this-week',
+    badge: 'Solo Trip Done',
+    badgeStyle: { background: '#ffed00', color: '#736a00' },
+    name: 'Priya Sharma',
+    subtitle: 'Solo bike trip to Ladakh, done and dusted • 5h ago',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
+    image: 'https://wanderon-images.gumlet.io/blogs/new/2025/01/best-time-for-leh-ladakh-solo-bike-trip.jpg',
+    likes: 96,
+    comments: 11,
+    statBadge: '7 days • 900 km',
+  },
+];
+
+const LEADERBOARD = [
+  {
+    rank: 1,
+    medal: '🥇',
+    name: 'Elena Vance',
+    xp: '4,250 XP',
+    bg: 'bg-[#ffed00]',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA3HSnRMBfUiKLTTVz-r9NlkIjnrrTThFp0IbPVXpLlNPgMWEAE_AzPF_3q1gKLdZtX-L2sM4DUopi_V0Ad3Pp8ksOmvEFDvrrAc2i_1iWfI_k6mumBPHLcfeYS02rfVIKx20CG7tpGJns9Vvf-XqJZpJqOwTAZypQz_Kep1VB4T3TxHsRD6mThSxw9ril9D1rQH_471vxMCpyXu39zev5Rr7-s3esElO6fB82dRXi7s6TWbsLAAaY9',
+  },
+  {
+    rank: 2,
+    medal: '🥈',
+    name: 'Alex Rivero',
+    xp: '3,910 XP',
+    bg: 'bg-gray-100',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
+  },
+  {
+    rank: 3,
+    medal: '🥉',
+    name: 'Priya Sharma',
+    xp: '3,640 XP',
+    bg: 'bg-[#ffdad6]',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
+  },
+];
+
+const FILTERS = [
+  { key: 'all', label: 'All', activeBg: 'bg-black text-white' },
+  { key: 'my-groups', label: 'My Groups', activeBg: 'bg-[#bdf2ff] text-black' },
+  { key: 'this-week', label: 'This Week', activeBg: 'bg-[#ffdad6] text-black' },
+];
+
+function WallOfFame() {
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  const filteredItems = activeFilter === 'all'
+    ? FEED_ITEMS
+    : FEED_ITEMS.filter((item) => item.filter === activeFilter);
+
+  return (
+    <div className="p-8 max-w-[1100px] mx-auto">
+      {/* Page header */}
+      <section className="pt-14 pb-8 flex flex-col items-start gap-6">
+        <div className="flex items-center gap-5">
+          <div className="w-16 h-16 flex items-center justify-center text-3xl bg-secondary-fixed border-3 border-on-surface rounded shadow-offset-mobile -rotate-2 hover:-translate-y-1 hover:rotate-2 transition-all duration-300 cursor-default">
+            🏆
+          </div>
+          <div>
+            <h1 className="font-bricolage text-display-xl-mobile tracking-tight leading-none">
+              WALL OF FAME
+            </h1>
+            <p className="text-on-surface-variant font-bricolage font-medium mt-2">
+              Every completed quest, celebrated out loud.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3 font-space font-bold text-sm uppercase">
+          {FILTERS.map(({ key, label, activeBg }) => (
+            <button
+              key={key}
+              onClick={() => setActiveFilter(key)}
+              className={`px-4 py-2 border-2 border-black rounded-full shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 ${
+                activeFilter === key
+                  ? activeBg
+                  : 'bg-white text-black hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Feed + Leaderboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        {/* Achievement feed */}
+        <section className="lg:col-span-2 flex flex-col gap-10">
+          {filteredItems.map((item) => (
+            <FeedCard key={item.id} item={item} />
+          ))}
+        </section>
+
+        {/* Leaderboard */}
+        <section className="lg:col-span-1">
+          <div className="bg-white border-4 border-black rounded-xl p-6 flex flex-col gap-6 sticky top-24 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b-4 border-black pb-4">
+              <div className="w-10 h-10 shrink-0 bg-[#ffed00] border-2 border-black rounded-full flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -rotate-12 hover:rotate-12 transition-transform cursor-default">
+                <span className="text-lg">👑</span>
+              </div>
+              <h2 className="font-bricolage font-extrabold text-2xl xl:text-3xl uppercase tracking-tighter text-black">
+                Top Questers
+              </h2>
+            </div>
+
+            {/* Rankings */}
+            <div className="flex flex-col gap-4">
+              {LEADERBOARD.map((entry) => (
+                <div
+                  key={entry.rank}
+                  className={`group relative flex items-center gap-4 p-3 ${entry.bg} border-3 border-black rounded-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer`}
+                  style={{ zIndex: 40 - entry.rank * 10 }}
+                >
+                  <div className="absolute -top-3 -left-3 w-8 h-8 bg-white border-2 border-black rounded-full flex items-center justify-center font-black text-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:rotate-12 transition-transform">
+                    {entry.medal}
+                  </div>
+                  <div className="w-12 h-12 shrink-0 border-2 border-black rounded-full overflow-hidden ml-2 bg-white">
+                    <img alt={entry.name} className="w-full h-full object-cover" src={entry.avatar} />
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <h4 className="font-bricolage font-bold uppercase text-base leading-tight text-black truncate">
+                      {entry.name}
+                    </h4>
+                    <p className="text-xs font-space font-bold text-black/70 uppercase">{entry.xp}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Your Status */}
+            <div className="mt-4 p-5 bg-[#e4006c] text-white border-3 border-black rounded-lg shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-1 -rotate-2 hover:rotate-0 hover:-translate-y-1 transition-all group cursor-pointer relative overflow-hidden z-40">
+              <div className="absolute -right-4 -top-4 opacity-20 group-hover:rotate-45 transition-transform duration-700">
+                <svg width="60" height="60" viewBox="0 0 60 60">
+                  <circle cx="10" cy="10" r="4" fill="white" />
+                  <circle cx="30" cy="10" r="4" fill="white" />
+                  <circle cx="50" cy="10" r="4" fill="white" />
+                  <circle cx="10" cy="30" r="4" fill="white" />
+                  <circle cx="30" cy="30" r="4" fill="white" />
+                  <circle cx="50" cy="30" r="4" fill="white" />
+                  <circle cx="10" cy="50" r="4" fill="white" />
+                  <circle cx="30" cy="50" r="4" fill="white" />
+                  <circle cx="50" cy="50" r="4" fill="white" />
+                </svg>
+              </div>
+              <span className="font-space text-xs uppercase font-bold text-white/80 tracking-wider">
+                Your Status
+              </span>
+              <div className="flex items-end justify-between relative z-10">
+                <div className="flex items-center gap-4">
+                  <span className="font-bricolage text-4xl italic font-black text-[#ffed00]">#42</span>
+                  <div>
+                    <p className="font-bricolage font-bold uppercase text-xl leading-none">You</p>
+                    <p className="text-sm font-space font-bold mt-1">1,120 XP</p>
+                  </div>
+                </div>
+                <div className="w-10 h-10 bg-white border-2 border-black rounded-full flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-1 transition-transform">
+                  <span className="font-black text-black">→</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <button className="w-full py-4 mt-2 bg-black text-white border-3 border-black rounded-lg shadow-[5px_5px_0px_0px_rgba(255,237,0,1)] font-space font-bold uppercase text-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0px_0px_rgba(255,237,0,1)] transition-all">
+              View Full Rankings
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function FeedCard({ item }) {
+  const rotateClass = item.id === 1 ? 'rotate-2' : '-rotate-2';
+
+  return (
+    <div
+      className={`card flex flex-col gap-6 ${rotateClass} font-bricolage hover:rotate-0 hover:-translate-y-2 transition-all duration-300`}
+    >
+      <span
+        className="sticker-label px-3 rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+        style={item.badgeStyle}
+      >
+        {item.badge}
+      </span>
+
+      <div className="flex items-center gap-4 mt-2">
+        <div className="w-16 h-16 border-3 border-on-surface rounded shadow-offset-mobile overflow-hidden cursor-pointer hover:z-10 hover:-translate-y-1 transition-transform">
+          <img alt={item.name} className="w-full h-full object-cover" src={item.avatar} />
+        </div>
+        <div>
+          <h4 className="font-bricolage font-extrabold text-xl uppercase">{item.name}</h4>
+          <p className="text-sm font-medium text-on-surface-variant">{item.subtitle}</p>
+        </div>
+      </div>
+
+      <div className="h-64 border-3 border-on-surface rounded overflow-hidden shadow-offset-mobile group">
+        <img
+          alt="Achievement"
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+          src={item.image}
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="flex gap-4">
+          <button className={`inline-flex items-center gap-1.5 px-5 py-2 border-2 border-on-surface ${item.id === 1 ? 'bg-primary-fixed text-on-primary-fixed' : 'bg-surface-container-lowest text-on-surface'} font-space font-bold text-label-bold rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all duration-150 hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]`}>
+            ❤️ {item.likes}
+          </button>
+          <button className="inline-flex items-center gap-1.5 px-5 py-2 border-2 border-on-surface bg-surface-container-lowest text-on-surface font-space font-bold text-label-bold rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all duration-150 hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]">
+            💬 {item.comments}
+          </button>
+        </div>
+
+        {item.reactions && (
+          <div className="flex -space-x-2">
+            {item.reactions.map((emoji, i) => {
+              const bgs = ['bg-tertiary', 'bg-secondary', 'bg-primary'];
+              return (
+                <span
+                  key={i}
+                  className={`w-9 h-9 flex items-center justify-center text-lg ${bgs[i]} border-2 border-on-surface rounded-full hover:z-10 hover:-translate-y-1 transition-transform cursor-pointer`}
+                >
+                  {emoji}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {item.statBadge && (
+          <span className="inline-block px-4 py-1.5 bg-[#bdf2ff] text-[#006874] border-2 border-black rounded-full font-space font-bold text-xs uppercase tracking-wide shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            {item.statBadge}
+          </span>
+        )}
+      </div>
+
+      {item.commentList && (
+        <div className="flex flex-col gap-2 pt-4 border-t-2 border-on-surface text-sm font-medium">
+          {item.commentList.map((c, i) => (
+            <p key={i}>
+              <span className={`font-bricolage font-extrabold uppercase ${c.color}`}>{c.name}:</span>{' '}
+              {c.text}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default WallOfFame;
