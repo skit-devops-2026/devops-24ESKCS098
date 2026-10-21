@@ -5,6 +5,7 @@ import BucketListHeader from '../components/bucketlist/BucketListHeader';
 import GoalFilters from '../components/bucketlist/GoalFilters';
 import GoalCard from '../components/bucketlist/GoalCard';
 import AddGoalCard from '../components/bucketlist/AddGoalCard';
+import AddGoalForm from '../components/bucketlist/AddGoalForm';
 
 const GOALS = [
   {
@@ -57,17 +58,25 @@ const FILTERS = [
 ];
 
 function BucketList() {
+  const [goals, setGoals] = useState(GOALS);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [showForm, setShowForm] = useState(false);
 
   const filteredGoals =
     activeFilter === 'all'
-      ? GOALS
-      : GOALS.filter((goal) => goal.status === activeFilter);
+      ? goals
+      : goals.filter((goal) => goal.status === activeFilter);
 
   const getCount = (key) =>
     key === 'all'
-      ? GOALS.length
-      : GOALS.filter((goal) => goal.status === key).length;
+      ? goals.length
+      : goals.filter((goal) => goal.status === key).length;
+
+  const handleAddGoal = (goal) => {
+    setGoals((prevGoals) => [...prevGoals, goal]);
+    setShowForm(false);
+    setActiveFilter('all');
+  };
 
   return (
     <>
@@ -122,7 +131,7 @@ function BucketList() {
         <aside className="hidden lg:block w-72 shrink-0" />
 
         <div className="flex-1">
-          <BucketListHeader totalGoals={GOALS.length} />
+          <BucketListHeader totalGoals={goals.length} />
 
           <GoalFilters
             filters={FILTERS}
@@ -131,12 +140,19 @@ function BucketList() {
             getCount={getCount}
           />
 
+          {showForm && (
+            <AddGoalForm
+              onAdd={handleAddGoal}
+              onCancel={() => setShowForm(false)}
+            />
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {filteredGoals.map((goal) => (
               <GoalCard key={goal.id} goal={goal} />
             ))}
 
-            <AddGoalCard />
+            <AddGoalCard onClick={() => setShowForm(true)} />
           </div>
         </div>
       </main>
