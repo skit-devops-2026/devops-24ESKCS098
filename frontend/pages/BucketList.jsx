@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 
 import BucketListHeader from '../components/bucketlist/BucketListHeader';
@@ -8,6 +7,38 @@ import AddGoalCard from '../components/bucketlist/AddGoalCard';
 import AddGoalForm from '../components/bucketlist/AddGoalForm';
 import SquadSidebar from '../components/sidebar/SquadSidebar';
 import GroupChallengeBanner from '../components/challenge/GroupChallengeBanner';
+import CreateSquadModal from '../components/squad/CreateSquadModal';
+
+const INITIAL_SQUADS = [
+  {
+    id: 'trip-squad',
+    name: 'Trip Squad ✈️',
+    members: 6,
+    activeQuests: 12,
+    unreadCount: 3,
+    avatar: 'https://images.unsplash.com/photo-1528127269322-539801943592?w=150&q=80',
+    bgColor: 'bg-brand-pink',
+  },
+  {
+    id: 'college-gang',
+    name: 'College Gang 🎓',
+    members: 4,
+    activeQuests: 5,
+    unreadCount: 1,
+    avatar: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=150&q=80',
+    bgColor: 'bg-brand-cyan',
+  },
+  {
+    id: 'family-adventure',
+    name: 'Family Adventure 🏡',
+    members: 5,
+    activeQuests: 8,
+    unreadCount: 0,
+    avatar: null,
+    icon: '🏡',
+    bgColor: 'bg-brand-lime',
+  },
+];
 
 const GOALS = [
   {
@@ -61,9 +92,13 @@ const FILTERS = [
 
 function BucketList() {
   const [goals, setGoals] = useState(GOALS);
+  const [squads, setSquads] = useState(INITIAL_SQUADS);
+  const [activeSquadId, setActiveSquadId] = useState('trip-squad');
   const [activeFilter, setActiveFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [isCreateSquadOpen, setIsCreateSquadOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
 
   // Apply both status filter and category filter
   const filteredGoals = goals.filter((goal) => {
@@ -81,6 +116,19 @@ function BucketList() {
     setGoals((prevGoals) => [...prevGoals, goal]);
     setShowForm(false);
     setActiveFilter('all');
+  };
+
+  const handleCreateSquad = (newSquad) => {
+    setSquads((prev) => [
+      ...prev,
+      {
+        ...newSquad,
+        bgColor: 'bg-brand-yellow',
+      },
+    ]);
+    setActiveSquadId(newSquad.id);
+    setToastMessage(`🎉 Squad "${newSquad.name}" created! Join code: ${newSquad.joinCode}`);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
   return (
@@ -137,14 +185,34 @@ function BucketList() {
         <aside className="hidden lg:block w-72 shrink-0">
           <div className="sticky top-24">
             <SquadSidebar
+              squads={squads}
+              activeSquadId={activeSquadId}
+              onSelectSquad={setActiveSquadId}
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
-              onAddGroupClick={() => {/* TODO: open CreateSquadModal */}}
+              onAddGroupClick={() => setIsCreateSquadOpen(true)}
             />
           </div>
         </aside>
 
         <div className="flex-1 space-y-8">
+          {/* Squad Creation Toast */}
+          {toastMessage && (
+            <div className="p-4 bg-brand-yellow brutal-border-lg rounded-xl shadow-brutal flex items-center justify-between font-mono text-xs font-black animate-in slide-in-from-top-4">
+              <div className="flex items-center gap-2 text-black">
+                <span className="material-symbols-outlined text-xl">celebration</span>
+                <span>{toastMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="w-6 h-6 bg-black text-white rounded brutal-border-sm flex items-center justify-center text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           <BucketListHeader totalGoals={goals.length} />
 
           {/* Group Challenge Banner */}
@@ -176,6 +244,13 @@ function BucketList() {
           </div>
         </div>
       </main>
+
+      {/* Step 5: Create Squad Modal */}
+      <CreateSquadModal
+        isOpen={isCreateSquadOpen}
+        onClose={() => setIsCreateSquadOpen(false)}
+        onCreateSquad={handleCreateSquad}
+      />
     </>
   );
 }
