@@ -66,7 +66,15 @@ function ShareableCardModal({ isOpen, onClose, item }) {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-9 h-9 border-2 border-black rounded-lg overflow-hidden shrink-0">
-                  <img alt={item.name} src={item.avatar} className="w-full h-full object-cover" />
+                  <img
+                    alt={item.name}
+                    src={item.avatar}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`;
+                    }}
+                  />
                 </div>
                 <div>
                   <h4 className="font-bricolage font-black text-sm uppercase text-black leading-tight">

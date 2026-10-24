@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 
 const LEADERBOARD = [
   {
     rank: 1,
     medal: '🥇',
     name: 'Elena Vance',
-    xp: '4,250 XP',
+    xp: '2,250 XP',
     bg: 'bg-[#ffed00]',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA3HSnRMBfUiKLTTVz-r9NlkIjnrrTThFp0IbPVXpLlNPgMWEAE_AzPF_3q1gKLdZtX-L2sM4DUopi_V0Ad3Pp8ksOmvEFDvrrAc2i_1iWfI_k6mumBPHLcfeYS02rfVIKx20CG7tpGJns9Vvf-XqJZpJqOwTAZypQz_Kep1VB4T3TxHsRD6mThSxw9ril9D1rQH_471vxMCpyXu39zev5Rr7-s3esElO6fB82dRXi7s6TWbsLAAaY9',
   },
@@ -13,7 +14,7 @@ const LEADERBOARD = [
     rank: 2,
     medal: '🥈',
     name: 'Alex Rivero',
-    xp: '3,910 XP',
+    xp: '1,950 XP',
     bg: 'bg-gray-100',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
   },
@@ -21,13 +22,45 @@ const LEADERBOARD = [
     rank: 3,
     medal: '🥉',
     name: 'Priya Sharma',
-    xp: '3,640 XP',
+    xp: '1,800 XP',
     bg: 'bg-[#ffdad6]',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
   },
 ];
 
-function Leaderboard({ onViewFullRankings }) {
+function Leaderboard({ onViewFullRankings, refreshTrigger }) {
+  const [entries, setEntries] = useState(LEADERBOARD);
+  const [myRank, setMyRank] = useState({ rank: 2, xp: '1,950 XP' });
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getLeaderboard({ limit: 3 })
+      .then((data) => {
+        if (!isMounted || !data) return;
+        if (Array.isArray(data.top) && data.top.length > 0) {
+          const formatted = data.top.map((item, idx) => ({
+            rank: item.rank,
+            medal: item.medal || (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'),
+            name: (item.name || '').replace(/\s*\(You\)/i, ''),
+            xp: typeof item.xp === 'number' ? `${item.xp.toLocaleString()} XP` : item.xp,
+            bg: item.rank === 1 ? 'bg-[#ffed00]' : item.rank === 2 ? 'bg-gray-100' : 'bg-[#ffdad6]',
+            avatar: item.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`,
+          }));
+          setEntries(formatted);
+        }
+        if (data.me) {
+          setMyRank({
+            rank: data.me.rank || 2,
+            xp: typeof data.me.xp === 'number' ? `${data.me.xp.toLocaleString()} XP` : data.me.xp || '3,910 XP',
+          });
+        }
+      })
+      .catch((err) => {
+        console.info('Using static leaderboard cache:', err.message);
+      });
+    return () => { isMounted = false; };
+  }, [refreshTrigger]);
+
   return (
     <div className="bg-white border-4 border-black rounded-xl p-6 flex flex-col gap-6 sticky top-24 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
       {/* Header */}
@@ -42,7 +75,7 @@ function Leaderboard({ onViewFullRankings }) {
 
       {/* Rankings */}
       <div className="flex flex-col gap-4">
-        {LEADERBOARD.map((entry) => (
+        {entries.map((entry) => (
           <div
             key={entry.rank}
             className={`group relative flex items-center gap-4 p-3 ${entry.bg} border-3 border-black rounded-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer`}
@@ -52,7 +85,15 @@ function Leaderboard({ onViewFullRankings }) {
               {entry.medal}
             </div>
             <div className="w-12 h-12 shrink-0 border-2 border-black rounded-full overflow-hidden ml-2 bg-white">
-              <img alt={entry.name} className="w-full h-full object-cover" src={entry.avatar} />
+              <img
+                alt={entry.name}
+                className="w-full h-full object-cover"
+                src={entry.avatar}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(entry.name || 'Quester')}&background=FFED00&color=000&bold=true`;
+                }}
+              />
             </div>
             <div className="flex-1 overflow-hidden">
               <h4 className="font-bricolage font-bold uppercase text-base leading-tight text-black truncate">
@@ -87,10 +128,10 @@ function Leaderboard({ onViewFullRankings }) {
         </span>
         <div className="flex items-end justify-between relative z-10">
           <div className="flex items-center gap-4">
-            <span className="font-bricolage text-4xl italic font-black text-[#ffed00]">#42</span>
+            <span className="font-bricolage text-4xl italic font-black text-[#ffed00]">#{myRank.rank}</span>
             <div>
               <p className="font-bricolage font-bold uppercase text-xl leading-none">You</p>
-              <p className="text-sm font-space font-bold mt-1">1,120 XP</p>
+              <p className="text-sm font-space font-bold mt-1">{myRank.xp}</p>
             </div>
           </div>
           <div className="w-10 h-10 bg-white border-2 border-black rounded-full flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-1 transition-transform">

@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import api from '../services/api';
 
 const REACTION_OPTIONS = [
-  { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100' },
-  { emoji: '❤️', label: 'Love', bg: 'hover:bg-pink-100' },
-  { emoji: '👏', label: 'Clap', bg: 'hover:bg-emerald-100' },
-  { emoji: '🎉', label: 'Party', bg: 'hover:bg-yellow-100' },
-  { emoji: '⚡', label: 'Epic', bg: 'hover:bg-cyan-100' },
+  { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100', type: 'fire' },
+  { emoji: '❤️', label: 'Love', bg: 'hover:bg-pink-100', type: 'like' },
+  { emoji: '👏', label: 'Clap', bg: 'hover:bg-emerald-100', type: 'clap' },
+  { emoji: '🎉', label: 'Party', bg: 'hover:bg-yellow-100', type: 'party' },
+  { emoji: '⚡', label: 'Epic', bg: 'hover:bg-cyan-100', type: 'epic' },
 ];
 
-function FeedCard({ item, onShare, onFriendClick }) {
+function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   const [likes, setLikes] = useState(item.likes || 0);
   const [hasLiked, setHasLiked] = useState(item.hasLiked || false);
   const [showComments, setShowComments] = useState(false);
@@ -16,6 +18,7 @@ function FeedCard({ item, onShare, onFriendClick }) {
   const [newComment, setNewComment] = useState('');
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [userReaction, setUserReaction] = useState(item.userReaction || null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [reactionCounts, setReactionCounts] = useState(
     item.reactionCounts || {
       '🔥': item.reactions?.includes('🔥') ? 5 : 0,
@@ -27,23 +30,38 @@ function FeedCard({ item, onShare, onFriendClick }) {
 
   const rotateClass = item.id % 2 === 1 ? 'rotate-1' : '-rotate-1';
 
-  // Toggle Like
-  const handleToggleLike = () => {
-    if (hasLiked) {
-      setLikes((prev) => prev - 1);
-      setHasLiked(false);
-    } else {
-      setLikes((prev) => prev + 1);
-      setHasLiked(true);
+  // Handle escape key to close delete modal
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape' && showDeleteModal) setShowDeleteModal(false);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showDeleteModal]);
+
+  // Toggle Like (Reactions API)
+  const handleToggleLike = async () => {
+    const nextLiked = !hasLiked;
+    setHasLiked(nextLiked);
+    setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+
+    try {
+      if (nextLiked) {
+        await api.upsertReaction(item.id, 'like');
+      } else {
+        await api.deleteReaction(item.id);
+      }
+    } catch (e) {
+      console.warn('Could not sync like with backend:', e.message);
     }
   };
 
-  // Add Reaction
-  const handleSelectReaction = (emoji) => {
+  // Add / Change Reaction
+  const handleSelectReaction = async (emoji, type = 'fire') => {
+    const isDeselect = userReaction === emoji;
     setReactionCounts((prev) => {
       const next = { ...prev };
-      if (userReaction === emoji) {
-        // deselect
+      if (isDeselect) {
         next[emoji] = Math.max(0, (next[emoji] || 1) - 1);
         setUserReaction(null);
       } else {
@@ -56,23 +74,47 @@ function FeedCard({ item, onShare, onFriendClick }) {
       return next;
     });
     setShowReactionPicker(false);
+
+    try {
+      if (isDeselect) {
+        await api.deleteReaction(item.id);
+      } else {
+        await api.upsertReaction(item.id, type);
+      }
+    } catch (e) {
+      console.warn('Could not sync reaction with backend:', e.message);
+    }
   };
 
   // Submit Comment
-  const handleCommentSubmit = (e) => {
+  const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    const text = newComment.trim();
+    if (!text) return;
 
-    const commentObj = {
+    const tempComment = {
+      id: Date.now(),
       name: 'You (Alex)',
       color: 'text-primary font-black',
-      text: newComment.trim(),
+      text,
       time: 'Just now',
     };
 
-    setComments((prev) => [...prev, commentObj]);
+    setComments((prev) => [...prev, tempComment]);
     setNewComment('');
+
+    try {
+      const res = await api.addComment(item.id, text);
+      if (res && res.comment) {
+        setComments((prev) =>
+          prev.map((c) => (c.id === tempComment.id ? res.comment : c))
+        );
+      }
+    } catch (err) {
+      console.warn('Could not persist comment to backend:', err.message);
+    }
   };
+
 
   const activeReactions = Object.entries(reactionCounts).filter(([_, count]) => count > 0);
 
@@ -100,7 +142,18 @@ function FeedCard({ item, onShare, onFriendClick }) {
       {/* Author & Description */}
       <div className="flex items-center gap-4">
         <div className="w-14 h-14 shrink-0 border-3 border-black rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden cursor-pointer hover:z-10 hover:scale-105 transition-transform bg-brand-pink">
-          <img alt={item.name} className="w-full h-full object-cover" src={item.avatar} />
+          <img
+            alt={item.name}
+            className="w-full h-full object-cover"
+            src={
+              item.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`
+            }
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`;
+            }}
+          />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -137,23 +190,25 @@ function FeedCard({ item, onShare, onFriendClick }) {
       )}
 
       {/* Proof Media Photo (Sec 4 Proof Upload) */}
-      <div className="relative h-72 border-3 border-black rounded-lg overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group bg-black">
-        <img
-          alt="Achievement Proof"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95 group-hover:opacity-100"
-          src={item.image}
-          onError={(e) => {
-            e.currentTarget.onerror = null;
-            e.currentTarget.src =
-              'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces';
-          }}
-        />
-        {item.completionDate && (
-          <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/85 text-white border-2 border-white rounded font-space font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-md">
-            🗓️ {item.completionDate}
-          </div>
-        )}
-      </div>
+      {item.image && typeof item.image === 'string' && item.image.trim() !== '' && (
+        <div className="relative h-72 border-3 border-black rounded-lg overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group bg-black">
+          <img
+            alt={item.badge || 'Achievement Proof'}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95 group-hover:opacity-100"
+            src={item.image}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src =
+                'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces';
+            }}
+          />
+          {item.completionDate && (
+            <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/85 text-white border-2 border-white rounded font-space font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-md">
+              🗓️ {item.completionDate}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Engagement Actions Row */}
       <div className="flex items-center justify-between flex-wrap gap-3 pt-2">
@@ -203,7 +258,7 @@ function FeedCard({ item, onShare, onFriendClick }) {
                   <button
                     key={opt.emoji}
                     type="button"
-                    onClick={() => handleSelectReaction(opt.emoji)}
+                    onClick={() => handleSelectReaction(opt.emoji, opt.type)}
                     className={`w-9 h-9 flex items-center justify-center text-lg border-2 border-black rounded-lg ${opt.bg} hover:scale-125 transition-transform cursor-pointer ${
                       userReaction === opt.emoji ? 'bg-brand-yellow font-black' : 'bg-white'
                     }`}
@@ -245,6 +300,30 @@ function FeedCard({ item, onShare, onFriendClick }) {
               />
             </svg>
           </button>
+
+          {/* Delete Post Button */}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              className="p-2 border-2 border-black bg-white text-black hover:bg-[#ffdad6] hover:text-[#93000a] rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer group/del"
+              title="Delete Post"
+            >
+              <svg
+                className="w-4 h-4 text-black group-hover/del:text-[#93000a] transition-colors"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -307,6 +386,99 @@ function FeedCard({ item, onShare, onFriendClick }) {
           </form>
         </div>
       )}
+      {/* Custom Neo-Brutalist Delete Confirmation Modal (Replaces browser alert) */}
+      {showDeleteModal &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
+            {/* Click-outside backdrop */}
+            <div
+              className="absolute inset-0"
+              onClick={() => setShowDeleteModal(false)}
+            />
+
+            <div className="relative w-full max-w-lg bg-[#FFFDF5] border-4 border-black rounded-2xl shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] z-10 overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Top Banner (Magenta / Pink Header bar) */}
+              <div className="flex items-center justify-between px-6 py-4 bg-[#e4006c] text-white border-b-4 border-black">
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2 py-0.5 bg-black text-white font-space font-black text-xs uppercase rounded">
+                    WALL OF FAME
+                  </span>
+                  <span className="font-space font-black text-xs uppercase tracking-wider text-pink-100">
+                    DELETE POST
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="w-8 h-8 bg-white text-black border-2 border-black rounded-full font-black text-sm flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-black hover:text-white transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 md:p-8 space-y-5">
+                <div>
+                  <h3 className="font-bricolage font-black text-2xl md:text-3xl uppercase tracking-tight text-black leading-tight">
+                    Are you sure you want to delete this post?
+                  </h3>
+                  <p className="font-hanken font-medium text-black/75 text-sm mt-2">
+                    This action cannot be undone. This accomplishment will be permanently removed from your feed and the Wall of Fame.
+                  </p>
+                </div>
+
+                {/* Post Summary Preview */}
+                <div className="p-4 bg-white border-3 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4">
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt=""
+                      className="w-16 h-16 rounded-lg border-2 border-black object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg border-2 border-black bg-brand-yellow flex items-center justify-center text-2xl shrink-0">
+                      🏆
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <span className="inline-block px-2 py-0.5 bg-brand-yellow text-black border border-black rounded text-[10px] font-space font-black uppercase mb-1">
+                      {item.badge || 'Quest'}
+                    </span>
+                    <h4 className="font-bricolage font-black text-sm uppercase text-black truncate">
+                      {item.badge}
+                    </h4>
+                    <p className="font-hanken text-xs text-black/70 line-clamp-1">
+                      {item.subtitle}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action Buttons matching Picture 2 */}
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(false)}
+                    className="bg-[#ffed00] text-black border-2 border-black rounded-lg px-6 py-3 font-space font-bold uppercase text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeleteModal(false);
+                      onDelete && onDelete(item.id);
+                    }}
+                    className="bg-[#ffdad6] text-[#93000a] border-2 border-black rounded-lg px-6 py-3 font-space font-bold uppercase text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#ba1a1a] hover:text-white hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none cursor-pointer flex items-center gap-2"
+                  >
+                    <span>🗑️</span>
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </article>
   );
 }

@@ -49,7 +49,7 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
         onAuthSuccess({
           name: formData.name || (formData.email ? formData.email.split('@')[0] : 'Squad Leader'),
           email: formData.email,
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
+          avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
           vibe: selectedVibe,
         });
       }
@@ -117,11 +117,10 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
                 setTab('login');
                 setFeedback(null);
               }}
-              className={`py-2 font-mono text-xs font-black uppercase rounded-lg transition-all ${
-                tab === 'login'
-                  ? 'bg-black text-white shadow-brutal-sm'
-                  : 'text-neutral-700 hover:text-black hover:bg-white/50'
-              }`}
+              className={`py-2 font-mono text-xs font-black uppercase rounded-lg transition-all ${tab === 'login'
+                ? 'bg-black text-white shadow-brutal-sm'
+                : 'text-neutral-700 hover:text-black hover:bg-white/50'
+                }`}
             >
               LOG IN
             </button>
@@ -131,11 +130,10 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
                 setTab('signup');
                 setFeedback(null);
               }}
-              className={`py-2 font-mono text-xs font-black uppercase rounded-lg transition-all ${
-                tab === 'signup'
-                  ? 'bg-brand-pink text-white shadow-brutal-sm'
-                  : 'text-neutral-700 hover:text-black hover:bg-white/50'
-              }`}
+              className={`py-2 font-mono text-xs font-black uppercase rounded-lg transition-all ${tab === 'signup'
+                ? 'bg-brand-pink text-white shadow-brutal-sm'
+                : 'text-neutral-700 hover:text-black hover:bg-white/50'
+                }`}
             >
               CREATE ACCOUNT
             </button>
@@ -241,11 +239,10 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
                         key={v.id}
                         type="button"
                         onClick={() => setSelectedVibe(v.id)}
-                        className={`py-1.5 px-2 rounded-lg brutal-border-sm font-mono text-xs font-bold transition-all flex items-center justify-center gap-1 ${
-                          isSelected
-                            ? 'bg-brand-yellow shadow-brutal-sm text-black ring-2 ring-black'
-                            : 'bg-white hover:bg-neutral-100 text-neutral-700'
-                        }`}
+                        className={`py-1.5 px-2 rounded-lg brutal-border-sm font-mono text-xs font-bold transition-all flex items-center justify-center gap-1 ${isSelected
+                          ? 'bg-brand-yellow shadow-brutal-sm text-black ring-2 ring-black'
+                          : 'bg-white hover:bg-neutral-100 text-neutral-700'
+                          }`}
                       >
                         <span>{v.emoji}</span>
                         <span>{v.label}</span>
@@ -277,7 +274,7 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => handleSubmit({ preventDefault: () => {} })}
+              onClick={() => handleSubmit({ preventDefault: () => { } })}
               className="py-2.5 px-3 bg-white hover:bg-neutral-50 rounded-xl brutal-border-sm shadow-brutal-sm font-mono text-xs font-black flex items-center justify-center gap-2 hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -303,7 +300,7 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
 
             <button
               type="button"
-              onClick={() => handleSubmit({ preventDefault: () => {} })}
+              onClick={() => handleSubmit({ preventDefault: () => { } })}
               className="py-2.5 px-3 bg-black hover:bg-neutral-800 text-white rounded-xl brutal-border-sm shadow-brutal-sm font-mono text-xs font-black flex items-center justify-center gap-2 hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
             >
               <svg className="w-4 h-4 fill-white" viewBox="0 0 24 24">

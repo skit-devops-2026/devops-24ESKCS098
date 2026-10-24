@@ -41,10 +41,13 @@ const FRIENDS_LIST = [
   'Riya Sharma',
 ];
 
-function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }) {
-  const [title, setTitle] = useState(goal?.title || '');
-  const [subtitle, setSubtitle] = useState(goal?.description || '');
+const CATEGORY_OPTIONS = ['ADVENTURE', 'TRAVEL', 'FITNESS', 'SKILLS', 'SQUAD'];
+
+function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
   const [selectedSquad, setSelectedSquad] = useState(AVAILABLE_SQUADS[0]);
+  const [category, setCategory] = useState('ADVENTURE');
   const [badgeText, setBadgeText] = useState('Epic Milestone');
   const [statBadge, setStatBadge] = useState('');
   const [selectedFriends, setSelectedFriends] = useState([]);
@@ -135,11 +138,13 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
     const newAchievement = {
       id: Date.now(),
       filter: 'my-groups',
+      title: title.trim(),
+      category: category,
       badge: badgeText || 'Quest Conquered',
       badgeStyle: { background: '#ffed00', color: '#000000' },
       name: 'Alex Rivero (You)',
       subtitle: subtitle.trim() || `Conquered "${title}" with the squad!`,
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
+      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
       image: imageUrl,
       likes: 1,
       hasLiked: true,
@@ -224,8 +229,8 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
             </div>
           </div>
 
-          {/* Squad & Stat Badge */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Squad, Category & Stat Badge */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block font-space font-bold uppercase text-xs mb-1.5 text-black">
                 Share With Squad
@@ -233,7 +238,7 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
               <select
                 value={selectedSquad}
                 onChange={(e) => setSelectedSquad(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white border-3 border-black rounded-xl font-space font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
+                className="w-full px-3 py-2 bg-white border-3 border-black rounded-xl font-space font-bold text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
               >
                 {AVAILABLE_SQUADS.map((s) => (
                   <option key={s} value={s}>
@@ -244,14 +249,30 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
             </div>
             <div>
               <label className="block font-space font-bold uppercase text-xs mb-1.5 text-black">
-                Custom Metric / Stat Badge
+                Trophy Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-3 py-2 bg-white border-3 border-black rounded-xl font-space font-bold text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
+              >
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-space font-bold uppercase text-xs mb-1.5 text-black">
+                Metric / Stat Badge
               </label>
               <input
                 type="text"
                 value={statBadge}
                 onChange={(e) => setStatBadge(e.target.value)}
                 placeholder="e.g. 18m depth • 45 mins"
-                className="w-full px-4 py-2.5 bg-white border-3 border-black rounded-xl font-hanken text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
+                className="w-full px-3 py-2 bg-white border-3 border-black rounded-xl font-hanken text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
               />
             </div>
           </div>

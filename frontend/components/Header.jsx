@@ -10,8 +10,8 @@ function Header() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isRecapOpen, setIsRecapOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState({
-    name: 'Alex T.',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
+    name: 'Alex Rivero',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
     unreadCount: 3,
   });
 
