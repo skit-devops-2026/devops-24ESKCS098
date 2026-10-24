@@ -43,7 +43,7 @@ const FRIENDS_LIST = [
 
 const CATEGORY_OPTIONS = ['ADVENTURE', 'TRAVEL', 'FITNESS', 'SKILLS', 'SQUAD'];
 
-function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
+function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }) {
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [selectedSquad, setSelectedSquad] = useState(AVAILABLE_SQUADS[0]);
@@ -66,6 +66,9 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
       setSubtitle(goal.description ? `Conquered "${goal.title}"! ${goal.description}` : `Conquered "${goal.title}" with the squad!`);
       if (goal.category) {
         setBadgeText(`${goal.category} Champion 🏆`);
+        if (CATEGORY_OPTIONS.includes(goal.category.toUpperCase())) {
+          setCategory(goal.category.toUpperCase());
+        }
       }
     } else {
       setTitle('');
