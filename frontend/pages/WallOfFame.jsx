@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Leaderboard from '../components/Leaderboard';
 import FeedCard from '../components/FeedCard';
 import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
 import FullLeaderboardModal from '../components/walloffame/FullLeaderboardModal';
 import PersonalTrophyRoom from '../components/walloffame/PersonalTrophyRoom';
 import ShareableCardModal from '../components/walloffame/ShareableCardModal';
+import api from '../services/api';
 
 const INITIAL_FEED_ITEMS = [
   {
@@ -16,7 +17,7 @@ const INITIAL_FEED_ITEMS = [
     squadName: 'Trip Squad',
     name: 'Alex Rivero',
     subtitle: 'Just finished my first solo skydive from 15,000 ft! 🪂 The freefall was absolute madness.',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
     image: 'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces',
     likes: 128,
     hasLiked: false,
@@ -58,6 +59,31 @@ const INITIAL_FEED_ITEMS = [
       { name: 'Elena Vance', color: 'text-[#006877]', text: 'That view is unreal Priya! Proud of you!', time: '2h ago' },
     ],
   },
+  {
+    id: 3,
+    filter: 'this-week',
+    category: 'FITNESS',
+    badge: 'Cardio Beast',
+    badgeStyle: { background: '#ffdad6', color: '#000000' },
+    squadName: 'Fitness Freaks',
+    name: 'Elena Vance',
+    subtitle: 'Crossed the half marathon finish line in 1h 54m! Trained 16 weeks through monsoon rain. 🏃‍♀️💨',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA3HSnRMBfUiKLTTVz-r9NlkIjnrrTThFp0IbPVXpLlNPgMWEAE_AzPF_3q1gKLdZtX-L2sM4DUopi_V0Ad3Pp8ksOmvEFDvrrAc2i_1iWfI_k6mumBPHLcfeYS02rfVIKx20CG7tpGJns9Vvf-XqJZpJqOwTAZypQz_Kep1VB4T3TxHsRD6mThSxw9ril9D1rQH_471vxMCpyXu39zev5Rr7-s3esElO6fB82dRXi7s6TWbsLAAaY9',
+    image: 'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=600&q=80',
+    likes: 84,
+    hasLiked: false,
+    comments: 8,
+    xpEarned: 400,
+    completionDate: 'Oct 20, 2026',
+    statBadge: '21.1 km • 1h 54m',
+    taggedFriends: [],
+    reactions: ['🔥', '💪', '🎉'],
+    reactionCounts: { '🔥': 18, '💪': 14, '🎉': 7 },
+    userReaction: null,
+    commentList: [
+      { name: 'Alex Rivero', color: 'text-[#e4006c]', text: 'Unbelievable pace Elena! Beast mode activated! 🚀', time: '1d ago' },
+    ],
+  },
 ];
 
 const FILTERS = [
@@ -69,22 +95,103 @@ const FILTERS = [
 function WallOfFame() {
   const [viewMode, setViewMode] = useState('squad-feed'); // 'squad-feed' | 'trophy-room'
   const [feedItems, setFeedItems] = useState(INITIAL_FEED_ITEMS);
+  const [weeklyQuestsCount, setWeeklyQuestsCount] = useState(18);
   const [activeFilter, setActiveFilter] = useState('all');
   const [isCelebrateOpen, setIsCelebrateOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [shareItem, setShareItem] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [refreshLeaderboardTrigger, setRefreshLeaderboardTrigger] = useState(0);
 
-  const handlePostAchievement = (newItem) => {
-    setFeedItems((prev) => [newItem, ...prev]);
+  // Live Backend Feed & Weekly Stats Fetching
+  useEffect(() => {
+    let isMounted = true;
+    api.getFeed(activeFilter)
+      .then((data) => {
+        if (isMounted && data && Array.isArray(data.posts) && data.posts.length > 0) {
+          setFeedItems(data.posts);
+        }
+      })
+      .catch((err) => {
+        console.info('Backend offline or initializing; displaying cached feed items:', err.message);
+      });
+
+    api.getWeeklyStats()
+      .then((data) => {
+        if (isMounted && data && typeof data.count === 'number') {
+          setWeeklyQuestsCount(data.count || 18);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeFilter]);
+
+  const handlePostAchievement = async (newItem) => {
+    try {
+      const res = await api.createPost({
+        title: newItem.title || newItem.badge,
+        caption: newItem.subtitle,
+        badgeLabel: newItem.badge,
+        category: newItem.category || 'ADVENTURE',
+        statBadge: newItem.statBadge,
+        imageUrls: newItem.image ? [newItem.image] : [],
+        proofImages: newItem.image ? [newItem.image] : [],
+        image: newItem.image,
+        xp: newItem.xpEarned || 250,
+        visibility: 'shared',
+        taggedFriendIds: newItem.taggedFriends?.map((_, i) => i + 2) || [],
+      });
+      const createdItem = res && res.post ? {
+        ...newItem,
+        id: res.post.id,
+        xpEarned: res.post.xp_earned || newItem.xpEarned,
+      } : newItem;
+      setFeedItems((prev) => [createdItem, ...prev]);
+      setRefreshLeaderboardTrigger((prev) => prev + 1);
+    } catch {
+      // Offline fallback
+      setFeedItems((prev) => [newItem, ...prev]);
+      setRefreshLeaderboardTrigger((prev) => prev + 1);
+    }
     setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${newItem.xpEarned} XP)`);
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const filteredItems =
-    activeFilter === 'all'
-      ? feedItems
-      : feedItems.filter((item) => item.filter === activeFilter);
+  const handleDeletePost = async (postId) => {
+    try {
+      await api.deletePost(postId);
+    } catch (err) {
+      console.warn('Backend delete failed (or in offline mode):', err.message);
+    }
+    setFeedItems((prev) => prev.filter((p) => p.id !== postId));
+    setRefreshLeaderboardTrigger((prev) => prev + 1);
+    setToastMessage('🗑️ Post deleted successfully!');
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const filteredItems = feedItems.filter((item) => {
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'my-groups') {
+      return (
+        item.filter === 'my-groups' ||
+        item.squadName?.toLowerCase().includes('trip') ||
+        item.squadName?.toLowerCase().includes('college') ||
+        item.group_id === 1 ||
+        item.group_id === 2
+      );
+    }
+    if (activeFilter === 'this-week') {
+      return (
+        item.filter === 'this-week' ||
+        item.completionDate?.includes('2026') ||
+        Boolean(item.completed_at)
+      );
+    }
+    return true;
+  });
 
   return (
     <div className="p-4 sm:p-8 max-w-[1280px] mx-auto min-h-screen">
@@ -112,12 +219,15 @@ function WallOfFame() {
             🏆
           </div>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="font-bricolage text-3xl md:text-5xl font-black tracking-tight leading-none text-black">
                 WALL OF FAME
               </h1>
               <span className="hidden sm:inline-block px-2.5 py-0.5 bg-[#b4f8c8] text-black border-2 border-black rounded font-space font-black text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 Live Feed
+              </span>
+              <span className="px-2.5 py-0.5 bg-[#ffed00] text-black border-2 border-black rounded font-space font-black text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                🔥 This Week: {weeklyQuestsCount} Quests
               </span>
             </div>
             <p className="text-black/75 font-bricolage font-medium mt-1 text-sm md:text-base">
@@ -202,6 +312,7 @@ function WallOfFame() {
                   key={item.id}
                   item={item}
                   onShare={(it) => setShareItem(it)}
+                  onDelete={handleDeletePost}
                   onFriendClick={(name) => {
                     setToastMessage(`Viewing quests shared with @${name}`);
                     setTimeout(() => setToastMessage(null), 3000);
@@ -212,14 +323,17 @@ function WallOfFame() {
 
             {/* Leaderboard Column */}
             <aside className="lg:col-span-1">
-              <Leaderboard onViewFullRankings={() => setIsLeaderboardOpen(true)} />
+              <Leaderboard
+                refreshTrigger={refreshLeaderboardTrigger}
+                onViewFullRankings={() => setIsLeaderboardOpen(true)}
+              />
             </aside>
           </div>
         </div>
       ) : (
         /* Personal Achievement Log (Section 4) */
         <div className="pt-8">
-          <PersonalTrophyRoom />
+          <PersonalTrophyRoom refreshTrigger={refreshLeaderboardTrigger} />
         </div>
       )}
 

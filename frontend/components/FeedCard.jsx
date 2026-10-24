@@ -1,14 +1,15 @@
 import { useState } from 'react';
+import api from '../services/api';
 
 const REACTION_OPTIONS = [
-  { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100' },
-  { emoji: '❤️', label: 'Love', bg: 'hover:bg-pink-100' },
-  { emoji: '👏', label: 'Clap', bg: 'hover:bg-emerald-100' },
-  { emoji: '🎉', label: 'Party', bg: 'hover:bg-yellow-100' },
-  { emoji: '⚡', label: 'Epic', bg: 'hover:bg-cyan-100' },
+  { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100', type: 'fire' },
+  { emoji: '❤️', label: 'Love', bg: 'hover:bg-pink-100', type: 'like' },
+  { emoji: '👏', label: 'Clap', bg: 'hover:bg-emerald-100', type: 'clap' },
+  { emoji: '🎉', label: 'Party', bg: 'hover:bg-yellow-100', type: 'party' },
+  { emoji: '⚡', label: 'Epic', bg: 'hover:bg-cyan-100', type: 'epic' },
 ];
 
-function FeedCard({ item, onShare, onFriendClick }) {
+function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   const [likes, setLikes] = useState(item.likes || 0);
   const [hasLiked, setHasLiked] = useState(item.hasLiked || false);
   const [showComments, setShowComments] = useState(false);
@@ -27,23 +28,29 @@ function FeedCard({ item, onShare, onFriendClick }) {
 
   const rotateClass = item.id % 2 === 1 ? 'rotate-1' : '-rotate-1';
 
-  // Toggle Like
-  const handleToggleLike = () => {
-    if (hasLiked) {
-      setLikes((prev) => prev - 1);
-      setHasLiked(false);
-    } else {
-      setLikes((prev) => prev + 1);
-      setHasLiked(true);
+  // Toggle Like (Reactions API)
+  const handleToggleLike = async () => {
+    const nextLiked = !hasLiked;
+    setHasLiked(nextLiked);
+    setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+
+    try {
+      if (nextLiked) {
+        await api.upsertReaction(item.id, 'like');
+      } else {
+        await api.deleteReaction(item.id);
+      }
+    } catch (e) {
+      console.warn('Could not sync like with backend:', e.message);
     }
   };
 
-  // Add Reaction
-  const handleSelectReaction = (emoji) => {
+  // Add / Change Reaction
+  const handleSelectReaction = async (emoji, type = 'fire') => {
+    const isDeselect = userReaction === emoji;
     setReactionCounts((prev) => {
       const next = { ...prev };
-      if (userReaction === emoji) {
-        // deselect
+      if (isDeselect) {
         next[emoji] = Math.max(0, (next[emoji] || 1) - 1);
         setUserReaction(null);
       } else {
@@ -56,23 +63,47 @@ function FeedCard({ item, onShare, onFriendClick }) {
       return next;
     });
     setShowReactionPicker(false);
+
+    try {
+      if (isDeselect) {
+        await api.deleteReaction(item.id);
+      } else {
+        await api.upsertReaction(item.id, type);
+      }
+    } catch (e) {
+      console.warn('Could not sync reaction with backend:', e.message);
+    }
   };
 
   // Submit Comment
-  const handleCommentSubmit = (e) => {
+  const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    const text = newComment.trim();
+    if (!text) return;
 
-    const commentObj = {
+    const tempComment = {
+      id: Date.now(),
       name: 'You (Alex)',
       color: 'text-primary font-black',
-      text: newComment.trim(),
+      text,
       time: 'Just now',
     };
 
-    setComments((prev) => [...prev, commentObj]);
+    setComments((prev) => [...prev, tempComment]);
     setNewComment('');
+
+    try {
+      const res = await api.addComment(item.id, text);
+      if (res && res.comment) {
+        setComments((prev) =>
+          prev.map((c) => (c.id === tempComment.id ? res.comment : c))
+        );
+      }
+    } catch (err) {
+      console.warn('Could not persist comment to backend:', err.message);
+    }
   };
+
 
   const activeReactions = Object.entries(reactionCounts).filter(([_, count]) => count > 0);
 
@@ -100,7 +131,18 @@ function FeedCard({ item, onShare, onFriendClick }) {
       {/* Author & Description */}
       <div className="flex items-center gap-4">
         <div className="w-14 h-14 shrink-0 border-3 border-black rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden cursor-pointer hover:z-10 hover:scale-105 transition-transform bg-brand-pink">
-          <img alt={item.name} className="w-full h-full object-cover" src={item.avatar} />
+          <img
+            alt={item.name}
+            className="w-full h-full object-cover"
+            src={
+              item.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`
+            }
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`;
+            }}
+          />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -137,23 +179,25 @@ function FeedCard({ item, onShare, onFriendClick }) {
       )}
 
       {/* Proof Media Photo (Sec 4 Proof Upload) */}
-      <div className="relative h-72 border-3 border-black rounded-lg overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group bg-black">
-        <img
-          alt="Achievement Proof"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95 group-hover:opacity-100"
-          src={item.image}
-          onError={(e) => {
-            e.currentTarget.onerror = null;
-            e.currentTarget.src =
-              'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces';
-          }}
-        />
-        {item.completionDate && (
-          <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/85 text-white border-2 border-white rounded font-space font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-md">
-            🗓️ {item.completionDate}
-          </div>
-        )}
-      </div>
+      {item.image && typeof item.image === 'string' && item.image.trim() !== '' && (
+        <div className="relative h-72 border-3 border-black rounded-lg overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group bg-black">
+          <img
+            alt={item.badge || 'Achievement Proof'}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95 group-hover:opacity-100"
+            src={item.image}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src =
+                'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces';
+            }}
+          />
+          {item.completionDate && (
+            <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/85 text-white border-2 border-white rounded font-space font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-md">
+              🗓️ {item.completionDate}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Engagement Actions Row */}
       <div className="flex items-center justify-between flex-wrap gap-3 pt-2">
@@ -203,7 +247,7 @@ function FeedCard({ item, onShare, onFriendClick }) {
                   <button
                     key={opt.emoji}
                     type="button"
-                    onClick={() => handleSelectReaction(opt.emoji)}
+                    onClick={() => handleSelectReaction(opt.emoji, opt.type)}
                     className={`w-9 h-9 flex items-center justify-center text-lg border-2 border-black rounded-lg ${opt.bg} hover:scale-125 transition-transform cursor-pointer ${
                       userReaction === opt.emoji ? 'bg-brand-yellow font-black' : 'bg-white'
                     }`}
@@ -245,6 +289,34 @@ function FeedCard({ item, onShare, onFriendClick }) {
               />
             </svg>
           </button>
+
+          {/* Delete Post Button */}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to delete this accomplishment post?`)) {
+                  onDelete(item.id);
+                }
+              }}
+              className="p-2 border-2 border-black bg-white text-black hover:bg-[#ff4d4f] hover:text-white rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer group/del"
+              title="Delete Post"
+            >
+              <svg
+                className="w-4 h-4 text-black group-hover/del:text-white transition-colors"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

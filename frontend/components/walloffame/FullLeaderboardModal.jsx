@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import api from '../../services/api';
 
 const FULL_RANKINGS = [
   {
@@ -7,41 +8,41 @@ const FULL_RANKINGS = [
     medal: '🥇',
     name: 'Elena Vance',
     squad: 'Trip Squad',
-    completedQuests: 19,
-    xp: 4250,
+    completedQuests: 7,
+    xp: 2250,
     badge: '🚀 Most Adventurous',
-    streak: '8w 🔥',
+    streak: '6w 🔥',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA3HSnRMBfUiKLTTVz-r9NlkIjnrrTThFp0IbPVXpLlNPgMWEAE_AzPF_3q1gKLdZtX-L2sM4DUopi_V0Ad3Pp8ksOmvEFDvrrAc2i_1iWfI_k6mumBPHLcfeYS02rfVIKx20CG7tpGJns9Vvf-XqJZpJqOwTAZypQz_Kep1VB4T3TxHsRD6mThSxw9ril9D1rQH_471vxMCpyXu39zev5Rr7-s3esElO6fB82dRXi7s6TWbsLAAaY9',
   },
   {
     rank: 2,
     medal: '🥈',
-    name: 'Alex Rivero (You)',
+    name: 'Alex Rivero',
     squad: 'Trip Squad',
-    completedQuests: 14,
-    xp: 3910,
+    completedQuests: 6,
+    xp: 1950,
     badge: '⚡ First to Finish',
     streak: '4w 🔥',
     isCurrentUser: true,
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
   },
   {
     rank: 3,
     medal: '🥉',
     name: 'Priya Sharma',
     squad: 'College Gang',
-    completedQuests: 15,
-    xp: 3640,
+    completedQuests: 5,
+    xp: 1800,
     badge: '🏍️ Nomad Rider',
-    streak: '6w 🔥',
+    streak: '5w 🔥',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
   },
   {
     rank: 4,
     name: 'Sarah Chen',
     squad: 'Trip Squad',
-    completedQuests: 12,
-    xp: 3100,
+    completedQuests: 5,
+    xp: 1550,
     badge: '🎨 Craft Specialist',
     streak: '3w 🔥',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&q=80',
@@ -50,18 +51,18 @@ const FULL_RANKINGS = [
     rank: 5,
     name: 'Marco Polo',
     squad: 'Trip Squad',
-    completedQuests: 11,
-    xp: 2950,
+    completedQuests: 4,
+    xp: 1400,
     badge: '🍝 Master Chef',
-    streak: '5w 🔥',
+    streak: '4w 🔥',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80',
   },
   {
     rank: 6,
     name: 'Jordan Smith',
     squad: 'Fitness Freaks',
-    completedQuests: 10,
-    xp: 2600,
+    completedQuests: 4,
+    xp: 1200,
     badge: '🏃 100k Club',
     streak: '2w 🔥',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&q=80',
@@ -70,10 +71,10 @@ const FULL_RANKINGS = [
     rank: 7,
     name: 'Riya Sharma',
     squad: 'College Gang',
-    completedQuests: 9,
-    xp: 2420,
+    completedQuests: 3,
+    xp: 1050,
     badge: '📸 Best Storyteller',
-    streak: '4w 🔥',
+    streak: '3w 🔥',
     avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&q=80',
   },
 ];
@@ -81,6 +82,7 @@ const FULL_RANKINGS = [
 function FullLeaderboardModal({ isOpen, onClose }) {
   const [filterTab, setFilterTab] = useState('ALL_TIME');
   const [searchQuery, setSearchQuery] = useState('');
+  const [rankings, setRankings] = useState(FULL_RANKINGS);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -90,13 +92,41 @@ function FullLeaderboardModal({ isOpen, onClose }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    const period = filterTab === 'THIS_MONTH' ? 'monthly' : 'all-time';
+
+    api.getLeaderboard({ period, search: searchQuery, limit: 50 })
+      .then((data) => {
+        if (isMounted && data && Array.isArray(data.top) && data.top.length > 0) {
+          setRankings(data.top);
+        }
+      })
+      .catch((err) => {
+        console.info('Using local rankings cache:', err.message);
+      });
+
+    return () => { isMounted = false; };
+  }, [isOpen, filterTab, searchQuery]);
+
   if (!isOpen) return null;
 
-  const filtered = FULL_RANKINGS.filter(
-    (u) =>
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.squad.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filtered = rankings
+    .filter(
+      (u) =>
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.squad.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (filterTab === 'STREAKS') {
+        const streakA = parseInt(a.streak, 10) || 0;
+        const streakB = parseInt(b.streak, 10) || 0;
+        return streakB - streakA;
+      }
+      return a.rank - b.rank;
+    });
+
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
@@ -176,7 +206,15 @@ function FullLeaderboardModal({ isOpen, onClose }) {
                   {item.medal || `#${item.rank}`}
                 </span>
                 <div className="w-12 h-12 shrink-0 border-2 border-black rounded-xl overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-white">
-                  <img alt={item.name} src={item.avatar} className="w-full h-full object-cover" />
+                  <img
+                    alt={item.name}
+                    src={item.avatar}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`;
+                    }}
+                  />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">

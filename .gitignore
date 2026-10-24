@@ -1,38 +1,89 @@
-# Logs
-logs
+# ==========================================
+# LifeQuest — Comprehensive .gitignore
+# ==========================================
+
+# 1. Environment variables & Secrets (CRITICAL: Never commit passwords or API keys)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+*.env
+*.env.*
+!.env.example
+!backend/.env.example
+
+# 2. Dependency directories
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+jspm_packages/
+.pnp
+.pnp.js
+.npm/
+.yarn/
+
+# 3. Production build outputs
+dist/
+dist-ssr/
+frontend/dist/
+build/
+out/
+.vite/
+frontend/.vite/
+
+# 4. Logs & Debugger outputs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 lerna-debug.log*
 
-# Dependency directories
-node_modules/
-jspm_packages/
-dist/
+# 5. User uploads, media & temporary scratch files
+uploads/
+backend/uploads/
+temp/
+tmp/
+*.tmp
+myArchive.txt
+wof.txt
 
-# Tailwind output CSS (optional, but typically you might ignore it if it's fully generated during build)
-# ./frontend/css/output.css
+# 6. Database dumps & local files
+*.sqlite
+*.sqlite3
+*.db
+*.dump
 
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
+# 7. Testing & Linting cache
+coverage/
+.nyc_output/
 .eslintcache
 
-# dotenv environment variables file
-.env
-.env.test
-
-# macOS
+# 8. Operating System files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
 
-# IDEs and Editors
+# 9. IDEs & Code Editors
 .idea/
 .vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 *.swp
 *.swo
 
+# 10. Local docs & notes
+docs/
 
 myArchive.txt
 wof.txt
