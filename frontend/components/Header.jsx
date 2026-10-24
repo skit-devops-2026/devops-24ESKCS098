@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import NotificationsDropdown from './notifications/NotificationsDropdown';
+import AuthModal from './auth/AuthModal';
 
 function Header() {
   const { pathname } = useLocation();
@@ -55,7 +57,7 @@ function Header() {
       </nav>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 md:gap-4">
         {/* Animated Search Bar */}
         <div className="relative hidden lg:flex items-center group">
           <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none z-10">
@@ -77,29 +79,88 @@ function Header() {
           <input
             type="text"
             placeholder="Search adventures..."
-            className="pl-10 pr-4 py-2 border-2 border-black rounded-md font-hanken text-sm focus:outline-none focus:ring-0 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all duration-300 w-48 focus:w-64 focus:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] focus:-translate-y-0.5"
+            className="pl-10 pr-4 py-2 border-2 border-black rounded-md font-hanken text-sm focus:outline-none focus:ring-0 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all duration-300 w-44 focus:w-60 focus:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] focus:-translate-y-0.5"
           />
         </div>
 
         {/* Start Quest Button */}
-        <button className="relative inline-flex items-center justify-center px-6 py-2 overflow-hidden font-space font-bold uppercase text-sm tracking-tighter text-white bg-primary border-2 border-black rounded-md group shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all">
+        <Link
+          to="/bucket-list"
+          className="relative inline-flex items-center justify-center px-4 md:px-6 py-2 overflow-hidden font-space font-bold uppercase text-xs md:text-sm tracking-tighter text-white bg-primary border-2 border-black rounded-md group shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all"
+        >
           <span className="absolute w-0 h-0 transition-all duration-500 ease-out bg-[#ffed00] rounded-full group-hover:w-56 group-hover:h-56" />
           <span className="relative group-hover:text-black transition-colors duration-300">
             + Start Quest
           </span>
-        </button>
+        </Link>
 
-        {/* User Avatar */}
-        <button className="w-10 h-10 border-2 border-black rounded-md overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
+        {/* Notifications Dropdown Anchor */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsNotifOpen(!isNotifOpen)}
+            title="Notifications"
+            className={`w-10 h-10 border-2 border-black rounded-md flex items-center justify-center transition-all ${
+              isNotifOpen
+                ? 'bg-brand-yellow shadow-none translate-x-[2px] translate-y-[2px]'
+                : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+            }`}
+          >
+            <span className="material-symbols-outlined text-xl text-black">
+              {currentUser.unreadCount > 0 ? 'notifications_unread' : 'notifications'}
+            </span>
+          </button>
+
+          {currentUser.unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-brand-pink text-white border-2 border-black rounded-full font-mono text-[10px] font-black flex items-center justify-center pointer-events-none animate-pulse">
+              {currentUser.unreadCount}
+            </span>
+          )}
+
+          {/* Notifications Dropdown Panel */}
+          <NotificationsDropdown
+            isOpen={isNotifOpen}
+            onClose={() => setIsNotifOpen(false)}
+            onNotificationClick={(notif) => {
+              console.log('Notification clicked:', notif);
+            }}
+          />
+        </div>
+
+        {/* User Avatar Button (Triggers AuthModal) */}
+        <button
+          type="button"
+          onClick={() => setIsAuthOpen(true)}
+          title={`Signed in as ${currentUser.name} (Click for Passport/Auth)`}
+          className="w-10 h-10 border-2 border-black rounded-md overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all relative group shrink-0"
+        >
           <img
-            src="https://ui-avatars.com/api/?name=User&background=000&color=fff&bold=true"
-            alt="User Avatar"
+            src={currentUser.avatar}
+            alt={currentUser.name}
             className="w-full h-full object-cover"
           />
+          <div className="absolute inset-0 bg-brand-yellow/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <span className="material-symbols-outlined text-xs text-black font-black">edit</span>
+          </div>
         </button>
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        initialTab="login"
+        onAuthSuccess={(user) => {
+          setCurrentUser((prev) => ({
+            ...prev,
+            name: user.name,
+            avatar: user.avatar,
+          }));
+        }}
+      />
     </header>
   );
 }
 
 export default Header;
+
