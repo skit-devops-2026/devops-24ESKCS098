@@ -6,6 +6,8 @@ import GoalFilters from '../components/bucketlist/GoalFilters';
 import GoalCard from '../components/bucketlist/GoalCard';
 import AddGoalCard from '../components/bucketlist/AddGoalCard';
 import AddGoalForm from '../components/bucketlist/AddGoalForm';
+import SquadSidebar from '../components/sidebar/SquadSidebar';
+import GroupChallengeBanner from '../components/challenge/GroupChallengeBanner';
 
 const GOALS = [
   {
@@ -61,11 +63,14 @@ function BucketList() {
   const [goals, setGoals] = useState(GOALS);
   const [activeFilter, setActiveFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
-  const filteredGoals =
-    activeFilter === 'all'
-      ? goals
-      : goals.filter((goal) => goal.status === activeFilter);
+  // Apply both status filter and category filter
+  const filteredGoals = goals.filter((goal) => {
+    const matchesStatus = activeFilter === 'all' || goal.status === activeFilter;
+    const matchesCategory = !selectedCategory || goal.category === selectedCategory;
+    return matchesStatus && matchesCategory;
+  });
 
   const getCount = (key) =>
     key === 'all'
@@ -128,10 +133,25 @@ function BucketList() {
       `}</style>
 
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-12 flex gap-8">
-        <aside className="hidden lg:block w-72 shrink-0" />
+        {/* Sidebar: Squad Switcher + Category Filters */}
+        <aside className="hidden lg:block w-72 shrink-0">
+          <div className="sticky top-24">
+            <SquadSidebar
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+              onAddGroupClick={() => {/* TODO: open CreateSquadModal */}}
+            />
+          </div>
+        </aside>
 
-        <div className="flex-1">
+        <div className="flex-1 space-y-8">
           <BucketListHeader totalGoals={goals.length} />
+
+          {/* Group Challenge Banner */}
+          <GroupChallengeBanner
+            onLogCheckpoint={() => {/* TODO: open ProgressUpdateDrawer */}}
+            onOpenDiscussion={() => {/* TODO: open discussion */}}
+          />
 
           <GoalFilters
             filters={FILTERS}
@@ -161,3 +181,4 @@ function BucketList() {
 }
 
 export default BucketList;
+
