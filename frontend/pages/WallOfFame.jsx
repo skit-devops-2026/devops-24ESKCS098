@@ -5,6 +5,7 @@ import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
 import FullLeaderboardModal from '../components/walloffame/FullLeaderboardModal';
 import PersonalTrophyRoom from '../components/walloffame/PersonalTrophyRoom';
 import ShareableCardModal from '../components/walloffame/ShareableCardModal';
+import { loadAchievements } from '../components/bucketlist/storage';
 
 const INITIAL_FEED_ITEMS = [
   {
@@ -68,7 +69,10 @@ const FILTERS = [
 
 function WallOfFame() {
   const [viewMode, setViewMode] = useState('squad-feed'); // 'squad-feed' | 'trophy-room'
-  const [feedItems, setFeedItems] = useState(INITIAL_FEED_ITEMS);
+  const [feedItems, setFeedItems] = useState(() => {
+    const saved = loadAchievements();
+    return saved.length > 0 ? [...saved, ...INITIAL_FEED_ITEMS] : INITIAL_FEED_ITEMS;
+  });
   const [activeFilter, setActiveFilter] = useState('all');
   const [isCelebrateOpen, setIsCelebrateOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);

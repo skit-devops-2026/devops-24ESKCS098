@@ -134,9 +134,10 @@ function GroupChallengeBanner({ challenge = CHALLENGE, onLogCheckpoint, onOpenDi
 
           <div className="flex gap-2">
             <button
+              id="banner-log-checkpoint-btn"
               type="button"
               onClick={onLogCheckpoint}
-              className="flex-1 py-3 px-4 bg-brand-pink text-white font-display font-black text-sm uppercase rounded brutal-border-sm shadow-brutal hover:translate-x-0.5 hover:translate-y-0.5 transition-all text-center"
+              className="flex-1 py-3 px-4 bg-brand-pink text-white font-display font-black text-sm uppercase rounded brutal-border-sm shadow-brutal hover:translate-x-0.5 hover:translate-y-0.5 transition-all text-center cursor-pointer"
             >
               Log Checkpoint 🚀
             </button>

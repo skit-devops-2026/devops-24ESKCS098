@@ -15,6 +15,7 @@
 const PERSONAL_KEY = 'lifequest_personal_goals';
 const TEAM_KEY = 'lifequest_team_goals_v2';
 const TEAM_REQUESTS_KEY = 'lifequest_team_requests_v2';
+const ACHIEVEMENTS_KEY = 'lifequest_walloffame_achievements_v1';
 
 function safeRead(key) {
   try {
@@ -208,6 +209,18 @@ export function loadTeamRequests() {
 
 export function saveTeamRequests(requests) {
   safeWrite(TEAM_REQUESTS_KEY, requests);
+}
+
+/** Load Wall of Fame achievements from localStorage. */
+export function loadAchievements() {
+  const stored = safeRead(ACHIEVEMENTS_KEY);
+  return stored || [];
+}
+
+/** Save newly minted achievement to Wall of Fame localStorage. */
+export function saveAchievement(achievement) {
+  const existing = loadAchievements();
+  safeWrite(ACHIEVEMENTS_KEY, [achievement, ...existing]);
 }
 
 // ── ID generator ───────────────────────────────────────────────

@@ -10,6 +10,8 @@ import TeamGoalsView from '../components/bucketlist/TeamGoalsView';
 import SquadSidebar from '../components/sidebar/SquadSidebar';
 import GroupChallengeBanner from '../components/challenge/GroupChallengeBanner';
 import CreateSquadModal from '../components/squad/CreateSquadModal';
+import ProgressUpdateDrawer from '../components/bucketlist/ProgressUpdateDrawer';
+import QuestCompletionModal from '../components/celebration/QuestCompletionModal';
 
 import { STATUS_FILTERS } from '../components/bucketlist/constants';
 import {
@@ -69,6 +71,8 @@ function BucketList() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState(null);
+  const [drawerGoal, setDrawerGoal] = useState(null);
+  const [celebrateGoal, setCelebrateGoal] = useState(null);
 
   // ── Team Goals State (Persisted in localStorage) ────────────
   const [teamGoals, setTeamGoals] = useState(() => loadTeamGoals());
@@ -133,20 +137,25 @@ function BucketList() {
 
   const handleQuickStatus = (id, newStatus) => {
     setGoals((prev) =>
-      prev.map((g) =>
-        g.id === id
-          ? {
-              ...g,
-              status: newStatus,
-              progress:
-                newStatus === 'completed'
-                  ? 100
-                  : newStatus === 'not-started'
-                  ? 0
-                  : g.progress,
-            }
-          : g
-      )
+      prev.map((g) => {
+        if (g.id === id) {
+          const updated = {
+            ...g,
+            status: newStatus,
+            progress:
+              newStatus === 'completed'
+                ? 100
+                : newStatus === 'not-started'
+                ? 0
+                : g.progress,
+          };
+          if (newStatus === 'completed') {
+            setCelebrateGoal(updated);
+          }
+          return updated;
+        }
+        return g;
+      })
     );
   };
 
@@ -257,8 +266,21 @@ function BucketList() {
 
           {/* Group Challenge Banner */}
           <GroupChallengeBanner
-            onLogCheckpoint={() => {/* TODO: open ProgressUpdateDrawer */}}
-            onOpenDiscussion={() => {/* TODO: open discussion */}}
+            onLogCheckpoint={() => {
+              const activeGoal = goals.find((g) => g.status === 'in-progress') || goals[0] || {
+                id: 'challenge-mt-fuji',
+                title: 'Summit Mount Fuji at Sunrise 🏔️',
+                description: 'Shared milestone challenge! Complete collective altitude checkpoints, gear prep checks, and endurance runs.',
+                category: 'ADVENTURE',
+                progress: 80,
+                status: 'in-progress',
+              };
+              setDrawerGoal(activeGoal);
+            }}
+            onOpenDiscussion={() => {
+              setToastMessage('💬 Squad discussion thread opened for Mt. Fuji summit quest!');
+              setTimeout(() => setToastMessage(null), 4000);
+            }}
           />
 
           {activeTab === 'personal' ? (
@@ -315,8 +337,21 @@ function BucketList() {
                 <GoalDetailModal
                   goal={selectedGoal}
                   onClose={() => setSelectedGoal(null)}
-                  onUpdate={handleUpdateGoal}
+                  onUpdate={(updated) => {
+                    handleUpdateGoal(updated);
+                    if (updated.status === 'completed' && updated.progress === 100) {
+                      setCelebrateGoal(updated);
+                    }
+                  }}
                   onDelete={handleDeleteGoal}
+                  onOpenDrawer={(g) => {
+                    setSelectedGoal(null);
+                    setDrawerGoal(g);
+                  }}
+                  onCelebrate={(g) => {
+                    setSelectedGoal(null);
+                    setCelebrateGoal(g);
+                  }}
                 />
               )}
             </>
@@ -341,6 +376,33 @@ function BucketList() {
         isOpen={isCreateSquadOpen}
         onClose={() => setIsCreateSquadOpen(false)}
         onCreateSquad={handleCreateSquad}
+      />
+
+      {/* Progress Update Drawer */}
+      <ProgressUpdateDrawer
+        isOpen={Boolean(drawerGoal)}
+        goal={drawerGoal}
+        onClose={() => setDrawerGoal(null)}
+        onSaveProgress={(updated) => {
+          handleUpdateGoal(updated);
+          setToastMessage(`📈 Progress updated to ${updated.progress}% for "${updated.title}"!`);
+          setTimeout(() => setToastMessage(null), 4000);
+        }}
+        onOpenCelebration={(g) => {
+          setDrawerGoal(null);
+          setCelebrateGoal(g);
+        }}
+      />
+
+      {/* Quest Completion Celebration Modal */}
+      <QuestCompletionModal
+        isOpen={Boolean(celebrateGoal)}
+        goal={celebrateGoal}
+        onClose={() => setCelebrateGoal(null)}
+        onPostAchievement={(achievement) => {
+          setToastMessage(`🎉 Quest "${achievement.badge}" posted to Wall of Fame! (+${achievement.xpEarned} XP)`);
+          setTimeout(() => setToastMessage(null), 5000);
+        }}
       />
     </>
   );
