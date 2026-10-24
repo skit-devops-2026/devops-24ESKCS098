@@ -27,7 +27,7 @@ const LEADERBOARD = [
   },
 ];
 
-function Leaderboard() {
+function Leaderboard({ onViewFullRankings }) {
   return (
     <div className="bg-white border-4 border-black rounded-xl p-6 flex flex-col gap-6 sticky top-24 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
       {/* Header */}
@@ -65,7 +65,10 @@ function Leaderboard() {
       </div>
 
       {/* Your Status */}
-      <div className="mt-4 p-5 bg-[#e4006c] text-white border-3 border-black rounded-lg shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-1 -rotate-2 hover:rotate-0 hover:-translate-y-1 transition-all group cursor-pointer relative overflow-hidden z-40">
+      <div
+        onClick={() => onViewFullRankings && onViewFullRankings()}
+        className="mt-4 p-5 bg-[#e4006c] text-white border-3 border-black rounded-lg shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-1 -rotate-2 hover:rotate-0 hover:-translate-y-1 transition-all group cursor-pointer relative overflow-hidden z-40"
+      >
         <div className="absolute -right-4 -top-4 opacity-20 group-hover:rotate-45 transition-transform duration-700">
           <svg width="60" height="60" viewBox="0 0 60 60">
             <circle cx="10" cy="10" r="4" fill="white" />
@@ -97,7 +100,11 @@ function Leaderboard() {
       </div>
 
       {/* Action Button */}
-      <button className="w-full py-4 mt-2 bg-black text-white border-3 border-black rounded-lg shadow-[5px_5px_0px_0px_rgba(255,237,0,1)] font-space font-bold uppercase text-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0px_0px_rgba(255,237,0,1)] transition-all">
+      <button
+        type="button"
+        onClick={() => onViewFullRankings && onViewFullRankings()}
+        className="w-full py-4 mt-2 bg-black text-white border-3 border-black rounded-lg shadow-[5px_5px_0px_0px_rgba(255,237,0,1)] font-space font-bold uppercase text-sm hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[3px_3px_0px_0px_rgba(255,237,0,1)] transition-all cursor-pointer"
+      >
         View Full Rankings
       </button>
     </div>
