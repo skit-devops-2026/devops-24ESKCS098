@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 const PHOTO_PRESETS = [
@@ -46,10 +46,15 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
   const [selectedSquad, setSelectedSquad] = useState(AVAILABLE_SQUADS[0]);
   const [badgeText, setBadgeText] = useState('Epic Milestone');
   const [statBadge, setStatBadge] = useState('');
-  const [imageUrl, setImageUrl] = useState(PHOTO_PRESETS[0].url);
   const [selectedFriends, setSelectedFriends] = useState([]);
   const [xpEarned, setXpEarned] = useState(250);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Photo states
+  const [imageUrl, setImageUrl] = useState(PHOTO_PRESETS[0].url);
+  const [uploadedFileName, setUploadedFileName] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -65,6 +70,45 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
     setSelectedFriends((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
+  };
+
+  // Process File from Device (FileReader -> base64 data URL)
+  const processFile = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (JPG, PNG, WEBP, etc.)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImageUrl(e.target.result);
+      setUploadedFileName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileInputChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      processFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFile(e.dataTransfer.files[0]);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -170,7 +214,7 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
               <select
                 value={selectedSquad}
                 onChange={(e) => setSelectedSquad(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white border-3 border-black rounded-xl font-space font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
+                className="w-full px-4 py-2.5 bg-white border-3 border-black rounded-xl font-space font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
               >
                 {AVAILABLE_SQUADS.map((s) => (
                   <option key={s} value={s}>
@@ -207,39 +251,98 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
             />
           </div>
 
-          {/* Proof Photo Selection */}
-          <div>
-            <label className="block font-space font-bold uppercase text-xs mb-1.5 text-black">
-              Proof Photo (Upload or Choose Preset)
-            </label>
-            <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
-              {PHOTO_PRESETS.map((preset) => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  onClick={() => setImageUrl(preset.url)}
-                  className={`px-3 py-1.5 text-xs font-space font-bold border-2 border-black rounded-lg shrink-0 cursor-pointer transition-all ${
-                    imageUrl === preset.url
-                      ? 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(255,237,0,1)]'
-                      : 'bg-white hover:bg-yellow-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              ))}
+          {/* Proof Photo Upload Section (Device File Upload + Adventure Presets) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="font-space font-bold uppercase text-xs text-black">
+                Proof Photo <span className="text-red-600">*</span>
+              </label>
+              <span className="text-[11px] font-space text-black/60">
+                Upload from your phone or computer
+              </span>
             </div>
-            <div className="flex gap-2">
+
+            {/* Device File Upload Drag & Drop Zone */}
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              className={`border-3 border-dashed border-black rounded-xl p-5 text-center cursor-pointer transition-all ${
+                isDragging
+                  ? 'bg-[#ffed00] scale-[0.99] border-black'
+                  : 'bg-white hover:bg-amber-50/50 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+              }`}
+            >
               <input
-                type="url"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://... direct image URL"
-                className="flex-1 px-4 py-2 bg-white border-3 border-black rounded-xl font-hanken text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleFileInputChange}
+                className="hidden"
               />
+
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-12 h-12 bg-brand-yellow border-2 border-black rounded-xl flex items-center justify-center text-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -rotate-3">
+                  📤
+                </div>
+                <div>
+                  <p className="font-bricolage font-black text-sm text-black">
+                    {uploadedFileName ? (
+                      <span className="text-[#e4006c]">📷 {uploadedFileName} (Click to change)</span>
+                    ) : (
+                      'Click to browse or drag & drop photo from your device'
+                    )}
+                  </p>
+                  <p className="font-space text-xs text-black/60 mt-0.5">
+                    Supports JPG, PNG, WEBP, HEIC (Max 15MB)
+                  </p>
+                </div>
+              </div>
             </div>
+
+            {/* Adventure Sample Presets */}
+            <div>
+              <p className="text-[11px] font-space font-bold text-black/70 uppercase mb-1.5">
+                Or pick a sample adventure photo:
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {PHOTO_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      setImageUrl(preset.url);
+                      setUploadedFileName(null);
+                    }}
+                    className={`px-3 py-1.5 text-xs font-space font-bold border-2 border-black rounded-lg shrink-0 cursor-pointer transition-all ${
+                      imageUrl === preset.url && !uploadedFileName
+                        ? 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(255,237,0,1)]'
+                        : 'bg-white hover:bg-yellow-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Image Preview */}
             {imageUrl && (
-              <div className="mt-2 h-36 w-full border-3 border-black rounded-xl overflow-hidden shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                <img alt="Proof Preview" src={imageUrl} className="w-full h-full object-cover" />
+              <div className="relative h-44 w-full border-3 border-black rounded-xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-black group">
+                <img
+                  alt="Proof Preview"
+                  src={imageUrl}
+                  className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src =
+                      'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces';
+                  }}
+                />
+                <div className="absolute top-2 left-2 px-2.5 py-1 bg-black/85 text-white border border-white rounded font-space font-black text-[10px] uppercase shadow">
+                  ✅ Photo Ready
+                </div>
               </div>
             )}
           </div>
