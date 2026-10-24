@@ -1,18 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { CATEGORIES } from './constants';
 
-const CATEGORIES = [
-  { value: 'ADVENTURE', label: 'Adventure', color: 'bg-[#ffed00]' },
-  { value: 'SKILLS', label: 'Skills', color: 'bg-[#bdf2ff]' },
-  { value: 'TRAVEL', label: 'Travel', color: 'bg-[#ffdad6]' },
-  { value: 'FITNESS', label: 'Fitness', color: 'bg-[#d9f99d]' },
-  { value: 'CAREER', label: 'Career', color: 'bg-[#e9d5ff]' },
-];
-
-function AddGoalForm({ onAdd, onCancel }) {
+function AddGoalForm({ onAdd, onCancel, isTeamGoal = false }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('ADVENTURE');
+  const [deadline, setDeadline] = useState('');
+  const [visibility, setVisibility] = useState('public');
   const titleRef = useRef(null);
 
   const canSubmit = title.trim() !== '' && description.trim() !== '';
@@ -41,10 +36,11 @@ function AddGoalForm({ onAdd, onCancel }) {
     if (!canSubmit) return;
 
     onAdd({
-      id: Date.now(),
       title: title.trim(),
       description: description.trim(),
       category,
+      deadline: deadline || '',
+      visibility,
       status: 'not-started',
       progress: 0,
     });
@@ -71,7 +67,7 @@ function AddGoalForm({ onAdd, onCancel }) {
         }
       `}</style>
 
-      {/* Backdrop — click outside to close */}
+      {/* Backdrop */}
       <div
         className="modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
         onClick={onCancel}
@@ -110,7 +106,7 @@ function AddGoalForm({ onAdd, onCancel }) {
               id="add-goal-title"
               className="font-bricolage text-3xl font-extrabold leading-tight"
             >
-              Create a Goal
+              {isTeamGoal ? 'Create a Team Goal' : 'Create a Goal'}
             </h2>
             <p className="text-sm text-black/60 mt-1">
               Dream it, write it, chase it.
@@ -191,6 +187,65 @@ function AddGoalForm({ onAdd, onCancel }) {
               })}
             </div>
           </div>
+
+          {/* Deadline */}
+          <div className="space-y-2">
+            <label
+              htmlFor="goal-deadline"
+              className="font-space font-bold uppercase text-xs tracking-wide block"
+            >
+              Deadline <span className="text-black/40">(optional)</span>
+            </label>
+            <input
+              id="goal-deadline"
+              type="date"
+              className={fieldClass}
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+            />
+          </div>
+
+          {/* Visibility */}
+          {!isTeamGoal && (
+            <div className="space-y-2">
+              <span className="font-space font-bold uppercase text-xs tracking-wide block">
+                Visibility
+              </span>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setVisibility('public')}
+                  aria-pressed={visibility === 'public'}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 border-black text-sm font-bold transition-all duration-200 ${
+                    visibility === 'public'
+                      ? 'bg-[#bdf2ff] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                      : 'bg-white hover:-translate-y-0.5'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                  </svg>
+                  Public
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibility('private')}
+                  aria-pressed={visibility === 'private'}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 border-black text-sm font-bold transition-all duration-200 ${
+                    visibility === 'private'
+                      ? 'bg-gray-800 text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                      : 'bg-white hover:-translate-y-0.5'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                  Private
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">

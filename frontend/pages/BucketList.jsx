@@ -1,13 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import BucketListHeader from '../components/bucketlist/BucketListHeader';
 import GoalFilters from '../components/bucketlist/GoalFilters';
 import GoalCard from '../components/bucketlist/GoalCard';
 import AddGoalCard from '../components/bucketlist/AddGoalCard';
 import AddGoalForm from '../components/bucketlist/AddGoalForm';
+import GoalDetailModal from '../components/bucketlist/GoalDetailModal';
+import TeamGoalsView from '../components/bucketlist/TeamGoalsView';
 import SquadSidebar from '../components/sidebar/SquadSidebar';
 import GroupChallengeBanner from '../components/challenge/GroupChallengeBanner';
 import CreateSquadModal from '../components/squad/CreateSquadModal';
+
+import { STATUS_FILTERS } from '../components/bucketlist/constants';
+import {
+  loadPersonalGoals,
+  savePersonalGoals,
+  loadTeamGoals,
+  saveTeamGoals,
+  loadTeamRequests,
+  saveTeamRequests,
+  generateId,
+} from '../components/bucketlist/storage';
 
 const INITIAL_SQUADS = [
   {
@@ -40,82 +53,101 @@ const INITIAL_SQUADS = [
   },
 ];
 
-const GOALS = [
-  {
-    id: 1,
-    status: 'in-progress',
-    category: 'ADVENTURE',
-    title: 'Summit Mount Fuji at Sunrise',
-    description:
-      'An epic 2-day trek to catch the dawn from the highest peak in Japan.',
-    progress: 40,
-  },
-  {
-    id: 2,
-    status: 'not-started',
-    category: 'SKILLS',
-    title: 'Master 5 Authentic Pasta Recipes',
-    description:
-      'Weekly cooking workshop to learn carbonara and more from scratch.',
-    progress: 0,
-  },
-  {
-    id: 3,
-    status: 'completed',
-    category: 'TRAVEL',
-    title: 'Road Trip Through the Amalfi Coast',
-    description:
-      '7 days, 3 friends, and an open-top vintage car. Done last summer.',
-    progress: 100,
-    participants: ['A', 'S', 'J'],
-  },
-];
-
-const FILTERS = [
-  { key: 'all', label: 'All', activeBg: 'bg-black text-white' },
-  {
-    key: 'in-progress',
-    label: 'In Progress',
-    activeBg: 'bg-[#ffed00] text-black',
-  },
-  {
-    key: 'not-started',
-    label: 'Not Started',
-    activeBg: 'bg-[#bdf2ff] text-black',
-  },
-  {
-    key: 'completed',
-    label: 'Completed',
-    activeBg: 'bg-[#ffdad6] text-black',
-  },
-];
-
 function BucketList() {
-  const [goals, setGoals] = useState(GOALS);
+  // ── Tab State: 'personal' | 'team' ──────────────────────────
+  const [activeTab, setActiveTab] = useState('personal');
+
+  // ── Squad State ─────────────────────────────────────────────
   const [squads, setSquads] = useState(INITIAL_SQUADS);
   const [activeSquadId, setActiveSquadId] = useState('trip-squad');
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [showForm, setShowForm] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const [isCreateSquadOpen, setIsCreateSquadOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Apply both status filter and category filter
+  // ── Personal Goals State (Persisted in localStorage) ────────
+  const [goals, setGoals] = useState(() => loadPersonalGoals());
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [showForm, setShowForm] = useState(false);
+  const [selectedGoal, setSelectedGoal] = useState(null);
+
+  // ── Team Goals State (Persisted in localStorage) ────────────
+  const [teamGoals, setTeamGoals] = useState(() => loadTeamGoals());
+  const [teamRequests, setTeamRequests] = useState(() => loadTeamRequests());
+  const [teamActiveFilter, setTeamActiveFilter] = useState('all');
+  const [teamActiveCategory, setTeamActiveCategory] = useState('all');
+
+  // ── Persist on change ────────────────────────────────────────
+  useEffect(() => {
+    savePersonalGoals(goals);
+  }, [goals]);
+
+  useEffect(() => {
+    saveTeamGoals(teamGoals);
+  }, [teamGoals]);
+
+  useEffect(() => {
+    saveTeamRequests(teamRequests);
+  }, [teamRequests]);
+
+  // ── Filtering (personal goals) ───────────────────────────────
   const filteredGoals = goals.filter((goal) => {
-    const matchesStatus = activeFilter === 'all' || goal.status === activeFilter;
-    const matchesCategory = !selectedCategory || goal.category === selectedCategory;
-    return matchesStatus && matchesCategory;
+    const statusMatch =
+      activeFilter === 'all' || goal.status === activeFilter;
+    const categoryMatch =
+      activeCategory === 'all' || goal.category === activeCategory;
+    return statusMatch && categoryMatch;
   });
 
-  const getCount = (key) =>
-    key === 'all'
-      ? goals.length
-      : goals.filter((goal) => goal.status === key).length;
+  const getCount = useCallback(
+    (key) =>
+      key === 'all'
+        ? goals.length
+        : goals.filter((g) => g.status === key).length,
+    [goals]
+  );
 
-  const handleAddGoal = (goal) => {
-    setGoals((prevGoals) => [...prevGoals, goal]);
+  // ── Handlers ────────────────────────────────────────────────
+  const handleAddGoal = (goalData) => {
+    const newGoal = {
+      ...goalData,
+      id: generateId('p'),
+      createdAt: new Date().toISOString(),
+    };
+    setGoals((prev) => [...prev, newGoal]);
     setShowForm(false);
     setActiveFilter('all');
+    setActiveCategory('all');
+  };
+
+  const handleUpdateGoal = (updated) => {
+    setGoals((prev) =>
+      prev.map((g) => (g.id === updated.id ? updated : g))
+    );
+    setSelectedGoal(updated);
+  };
+
+  const handleDeleteGoal = (id) => {
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+    setSelectedGoal(null);
+  };
+
+  const handleQuickStatus = (id, newStatus) => {
+    setGoals((prev) =>
+      prev.map((g) =>
+        g.id === id
+          ? {
+              ...g,
+              status: newStatus,
+              progress:
+                newStatus === 'completed'
+                  ? 100
+                  : newStatus === 'not-started'
+                  ? 0
+                  : g.progress,
+            }
+          : g
+      )
+    );
   };
 
   const handleCreateSquad = (newSquad) => {
@@ -188,8 +220,8 @@ function BucketList() {
               squads={squads}
               activeSquadId={activeSquadId}
               onSelectSquad={setActiveSquadId}
-              selectedCategory={selectedCategory}
-              onSelectCategory={setSelectedCategory}
+              selectedCategory={activeCategory === 'all' ? null : activeCategory}
+              onSelectCategory={(cat) => setActiveCategory(cat || 'all')}
               onAddGroupClick={() => setIsCreateSquadOpen(true)}
             />
           </div>
@@ -213,7 +245,15 @@ function BucketList() {
             </div>
           )}
 
-          <BucketListHeader totalGoals={goals.length} />
+          {/* Header with Personal vs Team Tab Switcher */}
+          <BucketListHeader
+            totalGoals={
+              activeTab === 'personal' ? goals.length : teamGoals.length
+            }
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            teamGoalCount={teamGoals.length}
+          />
 
           {/* Group Challenge Banner */}
           <GroupChallengeBanner
@@ -221,31 +261,82 @@ function BucketList() {
             onOpenDiscussion={() => {/* TODO: open discussion */}}
           />
 
-          <GoalFilters
-            filters={FILTERS}
-            activeFilter={activeFilter}
-            setActiveFilter={setActiveFilter}
-            getCount={getCount}
-          />
+          {activeTab === 'personal' ? (
+            /* ────── PERSONAL GOALS TAB ────── */
+            <>
+              <GoalFilters
+                filters={STATUS_FILTERS}
+                activeFilter={activeFilter}
+                setActiveFilter={setActiveFilter}
+                getCount={getCount}
+              />
 
-          {showForm && (
-            <AddGoalForm
-              onAdd={handleAddGoal}
-              onCancel={() => setShowForm(false)}
+              {showForm && (
+                <AddGoalForm
+                  onAdd={handleAddGoal}
+                  onCancel={() => setShowForm(false)}
+                />
+              )}
+
+              {filteredGoals.length === 0 ? (
+                <div className="text-center py-16 bg-white brutal-border-lg rounded-xl shadow-brutal p-8">
+                  <p className="font-bricolage text-2xl font-bold mb-2">
+                    {goals.length === 0
+                      ? 'No goals yet'
+                      : 'No goals match your filters'}
+                  </p>
+                  <p className="text-gray-600 font-hanken mb-6">
+                    {goals.length === 0
+                      ? 'Create your first goal to get started!'
+                      : 'Try changing the status or category filter.'}
+                  </p>
+                  {goals.length === 0 && (
+                    <div className="flex justify-center">
+                      <AddGoalCard onClick={() => setShowForm(true)} />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {filteredGoals.map((goal) => (
+                    <GoalCard
+                      key={goal.id}
+                      goal={goal}
+                      onClick={setSelectedGoal}
+                      onQuickStatus={handleQuickStatus}
+                    />
+                  ))}
+                  <AddGoalCard onClick={() => setShowForm(true)} />
+                </div>
+              )}
+
+              {/* Goal Detail Modal (View, Edit, Checkpoints, Progress, Delete) */}
+              {selectedGoal && (
+                <GoalDetailModal
+                  goal={selectedGoal}
+                  onClose={() => setSelectedGoal(null)}
+                  onUpdate={handleUpdateGoal}
+                  onDelete={handleDeleteGoal}
+                />
+              )}
+            </>
+          ) : (
+            /* ────── TEAM GOALS TAB ────── */
+            <TeamGoalsView
+              teamGoals={teamGoals}
+              setTeamGoals={setTeamGoals}
+              teamRequests={teamRequests}
+              setTeamRequests={setTeamRequests}
+              activeFilter={teamActiveFilter}
+              setActiveFilter={setTeamActiveFilter}
+              activeCategory={teamActiveCategory}
+              setActiveCategory={setTeamActiveCategory}
             />
           )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {filteredGoals.map((goal) => (
-              <GoalCard key={goal.id} goal={goal} />
-            ))}
-
-            <AddGoalCard onClick={() => setShowForm(true)} />
-          </div>
         </div>
       </main>
 
-      {/* Step 5: Create Squad Modal */}
+      {/* Create Squad Modal */}
       <CreateSquadModal
         isOpen={isCreateSquadOpen}
         onClose={() => setIsCreateSquadOpen(false)}
@@ -256,4 +347,3 @@ function BucketList() {
 }
 
 export default BucketList;
-
