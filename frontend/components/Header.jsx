@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import NotificationsDropdown from './notifications/NotificationsDropdown';
 import AuthModal from './auth/AuthModal';
+import YearEndRecapModal from './recap/YearEndRecapModal';
 
 function Header() {
   const { pathname } = useLocation();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isRecapOpen, setIsRecapOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState({
     name: 'Alex Rivero',
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
@@ -83,6 +85,18 @@ function Header() {
           />
         </div>
 
+        {/* 2026 Recap Button */}
+        <button
+          id="header-open-recap-btn"
+          type="button"
+          onClick={() => setIsRecapOpen(true)}
+          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-brand-yellow hover:bg-[#ffe600] text-black border-2 border-black rounded-md font-space font-bold uppercase text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer -rotate-1 hover:rotate-0"
+          title="Open 2026 Quest Wrapped"
+        >
+          <span>🎁</span>
+          <span className="font-black">Recap '26</span>
+        </button>
+
         {/* Start Quest Button */}
         <Link
           to="/bucket-list"
@@ -157,6 +171,12 @@ function Header() {
             avatar: user.avatar,
           }));
         }}
+      />
+
+      {/* 2026 Year End Recap Modal (Step 12 / Item 12) */}
+      <YearEndRecapModal
+        isOpen={isRecapOpen}
+        onClose={() => setIsRecapOpen(false)}
       />
     </header>
   );

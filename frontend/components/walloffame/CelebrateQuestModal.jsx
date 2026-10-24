@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { saveAchievement } from '../bucketlist/storage';
 
 const PHOTO_PRESETS = [
   {
@@ -58,6 +59,20 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
   const [uploadedFileName, setUploadedFileName] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (goal) {
+      setTitle(goal.title || '');
+      setSubtitle(goal.description ? `Conquered "${goal.title}"! ${goal.description}` : `Conquered "${goal.title}" with the squad!`);
+      if (goal.category) {
+        setBadgeText(`${goal.category} Champion 🏆`);
+      }
+    } else {
+      setTitle('');
+      setSubtitle('');
+      setBadgeText('Epic Milestone');
+    }
+  }, [goal, isOpen]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -145,15 +160,17 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
       commentList: [],
     };
 
+    saveAchievement(newAchievement);
+
     setTimeout(() => {
-      onPostAchievement(newAchievement);
+      if (onPostAchievement) onPostAchievement(newAchievement);
       setIsSubmitting(false);
       onClose();
     }, 600);
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl bg-[#FFFDF5] border-4 border-black rounded-2xl shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header Bar */}
         <div className="flex items-center justify-between px-6 py-4 bg-brand-yellow border-b-4 border-black shrink-0">
@@ -171,6 +188,7 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
             </div>
           </div>
           <button
+            id="celebrate-close-btn"
             type="button"
             onClick={onClose}
             className="w-9 h-9 bg-white border-2 border-black rounded-lg font-mono font-black text-sm flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#e4006c] hover:text-white transition-colors cursor-pointer"
@@ -188,6 +206,7 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
                 Quest Name <span className="text-red-600">*</span>
               </label>
               <input
+                id="celebrate-title-input"
                 type="text"
                 required
                 value={title}
@@ -406,6 +425,7 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement }) {
           {/* Footer Submit Button */}
           <div className="pt-2">
             <button
+              id="celebrate-submit-btn"
               type="submit"
               disabled={isSubmitting}
               className="w-full py-3.5 bg-black text-[#ffed00] border-3 border-black rounded-xl font-space font-black text-sm uppercase tracking-wider shadow-[5px_5px_0px_0px_rgba(228,0,108,1)] hover:shadow-none hover:translate-x-[3px] hover:translate-y-[3px] transition-all cursor-pointer flex items-center justify-center gap-2"

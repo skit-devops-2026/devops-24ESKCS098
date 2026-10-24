@@ -17,7 +17,15 @@ import {
  *   onDelete   – (goalId) => void
  *   isTeamGoal – hides visibility toggle for team goals
  */
-function GoalDetailModal({ goal, onClose, onUpdate, onDelete, isTeamGoal = false }) {
+function GoalDetailModal({
+  goal,
+  onClose,
+  onUpdate,
+  onDelete,
+  isTeamGoal = false,
+  onOpenDrawer,
+  onCelebrate,
+}) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -25,10 +33,21 @@ function GoalDetailModal({ goal, onClose, onUpdate, onDelete, isTeamGoal = false
   const [title, setTitle] = useState(goal.title);
   const [description, setDescription] = useState(goal.description);
   const [category, setCategory] = useState(goal.category);
+  const [priority, setPriority] = useState(goal.priority || 'HIGH');
   const [deadline, setDeadline] = useState(goal.deadline || '');
   const [visibility, setVisibility] = useState(goal.visibility || 'public');
   const [status, setStatus] = useState(goal.status);
-  const [progress, setProgress] = useState(goal.progress);
+  const [progress, setProgress] = useState(goal.progress ?? 0);
+
+  // Checkpoints sub-tasks
+  const initialCheckpoints = goal.checkpoints || [
+    { id: 1, text: 'Confirm dates & squad signups', completed: (goal.progress ?? 0) >= 25 },
+    { id: 2, text: 'Gear & logistics prep checklist', completed: (goal.progress ?? 0) >= 50 },
+    { id: 3, text: 'Mid-quest altitude / training milestone', completed: (goal.progress ?? 0) >= 75 },
+    { id: 4, text: 'Final summit & photo proof snapshot', completed: (goal.progress ?? 0) === 100 },
+  ];
+  const [checkpoints, setCheckpoints] = useState(initialCheckpoints);
+  const [newCheckpointText, setNewCheckpointText] = useState('');
 
   const titleRef = useRef(null);
 
@@ -55,6 +74,46 @@ function GoalDetailModal({ goal, onClose, onUpdate, onDelete, isTeamGoal = false
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
+  // Toggle Checkpoint with Auto Progress Calculation
+  const handleToggleCheckpoint = (cpId) => {
+    const updated = checkpoints.map((cp) =>
+      cp.id === cpId ? { ...cp, completed: !cp.completed } : cp
+    );
+    setCheckpoints(updated);
+    const completedCount = updated.filter((cp) => cp.completed).length;
+    const newProgress = Math.round((completedCount / updated.length) * 100);
+    setProgress(newProgress);
+    const newStatus = newProgress === 100 ? 'completed' : newProgress === 0 ? 'not-started' : 'in-progress';
+    setStatus(newStatus);
+    onUpdate({
+      ...goal,
+      checkpoints: updated,
+      progress: newProgress,
+      status: newStatus,
+    });
+  };
+
+  const handleAddCheckpoint = (e) => {
+    e.preventDefault();
+    if (!newCheckpointText.trim()) return;
+    const newCp = {
+      id: Date.now(),
+      text: newCheckpointText.trim(),
+      completed: false,
+    };
+    const updated = [...checkpoints, newCp];
+    setCheckpoints(updated);
+    setNewCheckpointText('');
+    const completedCount = updated.filter((cp) => cp.completed).length;
+    const newProgress = Math.round((completedCount / updated.length) * 100);
+    setProgress(newProgress);
+    onUpdate({
+      ...goal,
+      checkpoints: updated,
+      progress: newProgress,
+    });
+  };
+
   // When status changes, sync progress
   const handleStatusChange = (newStatus) => {
     setStatus(newStatus);
@@ -64,16 +123,19 @@ function GoalDetailModal({ goal, onClose, onUpdate, onDelete, isTeamGoal = false
 
   const handleSave = () => {
     if (!title.trim()) return;
-    onUpdate({
+    const updatedGoal = {
       ...goal,
       title: title.trim(),
       description: description.trim(),
       category,
+      priority,
+      checkpoints,
       deadline,
       visibility,
       status,
       progress: status === 'completed' ? 100 : status === 'not-started' ? 0 : progress,
-    });
+    };
+    onUpdate(updatedGoal);
     setEditing(false);
   };
 
@@ -135,10 +197,11 @@ function GoalDetailModal({ goal, onClose, onUpdate, onDelete, isTeamGoal = false
 
             {/* Close */}
             <button
+              id="detail-modal-close-btn"
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="w-9 h-9 flex items-center justify-center rounded-full border-2 border-black bg-white text-black transition-all duration-200 hover:bg-[#ffdad6] hover:rotate-90 hover:scale-110 active:scale-95"
+              className="w-9 h-9 flex items-center justify-center rounded-full border-2 border-black bg-white text-black transition-all duration-200 hover:bg-[#ffdad6] hover:rotate-90 hover:scale-110 active:scale-95 cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
                 <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
@@ -371,22 +434,87 @@ function GoalDetailModal({ goal, onClose, onUpdate, onDelete, isTeamGoal = false
                   <span className="px-3 py-1.5 rounded-full border-2 border-black bg-white">
                     Created: {formatDate(goal.createdAt)}
                   </span>
+                  <span className={`px-3 py-1.5 rounded-full border-2 border-black font-mono font-bold ${
+                    priority === 'HIGH' ? 'bg-brand-pink text-white' : priority === 'MEDIUM' ? 'bg-brand-yellow text-black' : 'bg-brand-lime text-black'
+                  }`}>
+                    {priority === 'HIGH' ? 'HIGH PRIORITY 🔥' : priority === 'MEDIUM' ? 'MEDIUM ⚡' : 'LOW 🌿'}
+                  </span>
                 </div>
 
-                {/* Progress */}
-                {goal.status === 'in-progress' && (
-                  <div>
-                    <p className="text-xs font-space font-bold uppercase mb-2">
-                      Progress: {goal.progress}%
-                    </p>
-                    <div className="w-full h-4 bg-gray-200 rounded-full border-2 border-black overflow-hidden">
-                      <div
-                        className="h-full bg-[#ffed00] rounded-full transition-all duration-500"
-                        style={{ width: `${goal.progress}%` }}
-                      />
-                    </div>
+                {/* Progress Bar & Status */}
+                <div>
+                  <div className="flex justify-between items-center text-xs font-space font-bold uppercase mb-2">
+                    <span>Progress: {progress}%</span>
+                    <span className="text-neutral-500 font-mono">
+                      {checkpoints.filter((c) => c.completed).length} / {checkpoints.length} Checkpoints
+                    </span>
                   </div>
-                )}
+                  <div className="w-full h-4 bg-gray-200 rounded-full border-2 border-black overflow-hidden p-0.5 shadow-inner">
+                    <div
+                      className="h-full bg-brand-pink rounded-full transition-all duration-500"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Checkpoints Checklist (Sub-tasks) */}
+                <div className="p-4 bg-white brutal-border-sm rounded-xl space-y-3 shadow-brutal-sm">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-2">
+                    <span className="font-mono text-xs font-black uppercase tracking-wider text-neutral-800">
+                      CHECKPOINTS CHECKLIST
+                    </span>
+                    <span className="font-mono text-[11px] font-bold text-brand-pink">
+                      AUTO-SYNCS PROGRESS
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {checkpoints.map((cp) => (
+                      <label
+                        key={cp.id}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-neutral-50 cursor-pointer transition-colors border border-neutral-200"
+                      >
+                        <input
+                          id={`checkpoint-input-${cp.id}`}
+                          type="checkbox"
+                          checked={cp.completed}
+                          onChange={() => handleToggleCheckpoint(cp.id)}
+                          className="w-4 h-4 accent-brand-pink cursor-pointer"
+                        />
+                        <span
+                          className={`font-hanken text-xs flex-1 ${
+                            cp.completed ? 'line-through text-neutral-400 font-medium' : 'text-neutral-900 font-bold'
+                          }`}
+                        >
+                          {cp.text}
+                        </span>
+                        {cp.completed && (
+                          <span className="text-[10px] font-mono font-bold text-brand-pink">✓ Done</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Add checkpoint inline */}
+                  <form onSubmit={handleAddCheckpoint} className="flex items-center gap-2 pt-1">
+                    <input
+                      id="detail-add-checkpoint-input"
+                      type="text"
+                      placeholder="+ Add new checkpoint..."
+                      value={newCheckpointText}
+                      onChange={(e) => setNewCheckpointText(e.target.value)}
+                      className="flex-1 px-3 py-1.5 bg-neutral-100 brutal-border-sm rounded-lg font-hanken text-xs focus:outline-none focus:ring-1 focus:ring-brand-pink"
+                    />
+                    <button
+                      id="detail-add-checkpoint-btn"
+                      type="submit"
+                      disabled={!newCheckpointText.trim()}
+                      className="px-3 py-1.5 bg-black text-white hover:bg-brand-pink font-mono text-xs font-bold rounded brutal-border-sm transition-all disabled:opacity-40 cursor-pointer"
+                    >
+                      Add
+                    </button>
+                  </form>
+                </div>
 
                 {/* Team members (for team goals) */}
                 {goal.members && goal.members.length > 0 && (
@@ -416,11 +544,34 @@ function GoalDetailModal({ goal, onClose, onUpdate, onDelete, isTeamGoal = false
                 )}
 
                 {/* Action buttons */}
-                <div className="flex flex-wrap gap-3 pt-2">
+                <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button
+                    id="detail-log-progress-btn"
+                    type="button"
+                    onClick={() => {
+                      if (onOpenDrawer) onOpenDrawer(goal);
+                    }}
+                    className="flex-1 bg-brand-yellow border-2 border-black rounded-lg px-4 py-3 font-space font-bold uppercase text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 flex items-center justify-center gap-1.5 text-black cursor-pointer"
+                  >
+                    <span>Log Progress 📈</span>
+                  </button>
+
+                  {status === 'completed' && onCelebrate && (
+                    <button
+                      id="detail-celebrate-btn"
+                      type="button"
+                      onClick={() => onCelebrate(goal)}
+                      className="flex-1 bg-brand-pink text-white border-2 border-black rounded-lg px-4 py-3 font-space font-bold uppercase text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Celebrate 🎉</span>
+                    </button>
+                  )}
+
+                  <button
+                    id="detail-edit-btn"
                     type="button"
                     onClick={() => setEditing(true)}
-                    className="bg-[#ffed00] border-2 border-black rounded-lg px-5 py-3 font-space font-bold uppercase text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none"
+                    className="bg-white border-2 border-black rounded-lg px-4 py-3 font-space font-bold uppercase text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-neutral-100 cursor-pointer"
                   >
                     Edit
                   </button>

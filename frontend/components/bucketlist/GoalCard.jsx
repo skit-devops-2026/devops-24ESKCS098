@@ -26,6 +26,7 @@ const GoalCard = ({ goal, onClick, onQuickStatus }) => {
 
   return (
     <div
+      id={`goal-card-${goal.id}`}
       role="button"
       tabIndex={0}
       onClick={() => onClick(goal)}
