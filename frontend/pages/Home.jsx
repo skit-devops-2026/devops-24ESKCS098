@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import SquadMembersWidget from '../components/squad/SquadMembersWidget';
 
 function Home() {
   return (
@@ -235,6 +236,33 @@ function Home() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Featured Squad Community Roster (Step 10 / Item 4) */}
+      <section className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b-3 border-black pb-4 gap-4">
+          <div>
+            <h2 className="text-3xl md:text-4xl font-bricolage font-extrabold uppercase tracking-tight">
+              Featured Squad Community
+            </h2>
+            <p className="font-hanken font-medium text-gray-700 mt-2">
+              Meet the questers conquering summits and adventures together.
+            </p>
+          </div>
+          <Link
+            to="/bucket-list"
+            className="px-6 py-2 bg-brand-pink text-white font-space font-bold uppercase text-sm border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all whitespace-nowrap"
+          >
+            Join a Squad &rarr;
+          </Link>
+        </div>
+
+        <SquadMembersWidget
+          squadName="Trip Squad ✈️"
+          category="ADVENTURE"
+          motto="6 globetrotters tackling summits, deep sea dives, and street food across 4 continents."
+          joinCode="TRIP26"
+        />
       </section>
     </main>
   );
