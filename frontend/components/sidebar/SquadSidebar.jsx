@@ -39,7 +39,7 @@ const CATEGORIES = [
   { id: 'CAREER', label: 'Career', emoji: '💼', count: 2, color: 'bg-brand-purple text-black', rotate: '-rotate-1' },
 ];
 
-function SquadSidebar({ activeSquadId = 'trip-squad', onSelectSquad, selectedCategory = null, onSelectCategory, onAddGroupClick }) {
+function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectSquad, selectedCategory = null, onSelectCategory, onAddGroupClick }) {
   const [currentSquad, setCurrentSquad] = useState(activeSquadId);
   const [activeCategory, setActiveCategory] = useState(selectedCategory);
 
@@ -73,7 +73,7 @@ function SquadSidebar({ activeSquadId = 'trip-squad', onSelectSquad, selectedCat
 
       {/* Squad Cards */}
       <div className="space-y-2.5">
-        {SQUADS.map((squad) => {
+        {squads.map((squad) => {
           const isActive = currentSquad === squad.id;
           return (
             <div
