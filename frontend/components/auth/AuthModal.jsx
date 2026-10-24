@@ -118,8 +118,8 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
                 setFeedback(null);
               }}
               className={`py-2 font-mono text-xs font-black uppercase rounded-lg transition-all ${tab === 'login'
-                  ? 'bg-black text-white shadow-brutal-sm'
-                  : 'text-neutral-700 hover:text-black hover:bg-white/50'
+                ? 'bg-black text-white shadow-brutal-sm'
+                : 'text-neutral-700 hover:text-black hover:bg-white/50'
                 }`}
             >
               LOG IN
@@ -131,8 +131,8 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
                 setFeedback(null);
               }}
               className={`py-2 font-mono text-xs font-black uppercase rounded-lg transition-all ${tab === 'signup'
-                  ? 'bg-brand-pink text-white shadow-brutal-sm'
-                  : 'text-neutral-700 hover:text-black hover:bg-white/50'
+                ? 'bg-brand-pink text-white shadow-brutal-sm'
+                : 'text-neutral-700 hover:text-black hover:bg-white/50'
                 }`}
             >
               CREATE ACCOUNT
@@ -240,8 +240,8 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
                         type="button"
                         onClick={() => setSelectedVibe(v.id)}
                         className={`py-1.5 px-2 rounded-lg brutal-border-sm font-mono text-xs font-bold transition-all flex items-center justify-center gap-1 ${isSelected
-                            ? 'bg-brand-yellow shadow-brutal-sm text-black ring-2 ring-black'
-                            : 'bg-white hover:bg-neutral-100 text-neutral-700'
+                          ? 'bg-brand-yellow shadow-brutal-sm text-black ring-2 ring-black'
+                          : 'bg-white hover:bg-neutral-100 text-neutral-700'
                           }`}
                       >
                         <span>{v.emoji}</span>
