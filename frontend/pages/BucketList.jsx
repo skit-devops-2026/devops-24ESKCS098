@@ -12,6 +12,7 @@ import GroupChallengeBanner from '../components/challenge/GroupChallengeBanner';
 import CreateSquadModal from '../components/squad/CreateSquadModal';
 import ProgressUpdateDrawer from '../components/bucketlist/ProgressUpdateDrawer';
 import QuestCompletionModal from '../components/celebration/QuestCompletionModal';
+import SquadMembersWidget from '../components/squad/SquadMembersWidget';
 
 import { STATUS_FILTERS } from '../components/bucketlist/constants';
 import {
@@ -73,6 +74,8 @@ function BucketList() {
   const [selectedGoal, setSelectedGoal] = useState(null);
   const [drawerGoal, setDrawerGoal] = useState(null);
   const [celebrateGoal, setCelebrateGoal] = useState(null);
+  const [squadView, setSquadView] = useState('challenge'); // 'challenge' | 'roster'
+  const currentSquad = squads.find((s) => s.id === activeSquadId) || squads[0];
 
   // ── Team Goals State (Persisted in localStorage) ────────────
   const [teamGoals, setTeamGoals] = useState(() => loadTeamGoals());
@@ -264,24 +267,75 @@ function BucketList() {
             teamGoalCount={teamGoals.length}
           />
 
-          {/* Group Challenge Banner */}
-          <GroupChallengeBanner
-            onLogCheckpoint={() => {
-              const activeGoal = goals.find((g) => g.status === 'in-progress') || goals[0] || {
-                id: 'challenge-mt-fuji',
-                title: 'Summit Mount Fuji at Sunrise 🏔️',
-                description: 'Shared milestone challenge! Complete collective altitude checkpoints, gear prep checks, and endurance runs.',
-                category: 'ADVENTURE',
-                progress: 80,
-                status: 'in-progress',
-              };
-              setDrawerGoal(activeGoal);
-            }}
-            onOpenDiscussion={() => {
-              setToastMessage('💬 Squad discussion thread opened for Mt. Fuji summit quest!');
-              setTimeout(() => setToastMessage(null), 4000);
-            }}
-          />
+          {/* Squad Showcase: Active Challenge vs Squad Members Roster */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="inline-flex p-1 bg-white border-2 border-black rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <button
+                  type="button"
+                  id="squad-tab-challenge-btn"
+                  onClick={() => setSquadView('challenge')}
+                  className={`px-3.5 py-1.5 font-space font-bold text-xs uppercase rounded-lg transition-all cursor-pointer ${
+                    squadView === 'challenge'
+                      ? 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(255,237,0,1)]'
+                      : 'text-black hover:bg-neutral-100'
+                  }`}
+                >
+                  🏔️ Active Squad Quest
+                </button>
+                <button
+                  type="button"
+                  id="squad-tab-roster-btn"
+                  onClick={() => setSquadView('roster')}
+                  className={`px-3.5 py-1.5 font-space font-bold text-xs uppercase rounded-lg transition-all cursor-pointer ${
+                    squadView === 'roster'
+                      ? 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(255,237,0,1)]'
+                      : 'text-black hover:bg-neutral-100'
+                  }`}
+                >
+                  👥 Squad Roster ({currentSquad?.name || 'Trip Squad'})
+                </button>
+              </div>
+
+              {squadView === 'roster' && (
+                <span className="font-mono text-xs font-bold text-neutral-600 hidden sm:inline">
+                  Viewing Roster for {currentSquad?.name}
+                </span>
+              )}
+            </div>
+
+            {squadView === 'challenge' ? (
+              <GroupChallengeBanner
+                onLogCheckpoint={() => {
+                  const activeGoal = goals.find((g) => g.status === 'in-progress') || goals[0] || {
+                    id: 'challenge-mt-fuji',
+                    title: 'Summit Mount Fuji at Sunrise 🏔️',
+                    description: 'Shared milestone challenge! Complete collective altitude checkpoints, gear prep checks, and endurance runs.',
+                    category: 'ADVENTURE',
+                    progress: 80,
+                    status: 'in-progress',
+                  };
+                  setDrawerGoal(activeGoal);
+                }}
+                onOpenDiscussion={() => {
+                  setToastMessage('💬 Squad discussion thread opened for Mt. Fuji summit quest!');
+                  setTimeout(() => setToastMessage(null), 4000);
+                }}
+              />
+            ) : (
+              <SquadMembersWidget
+                squadName={currentSquad?.name || 'Trip Squad ✈️'}
+                category="ADVENTURE"
+                motto="6 globetrotters tackling summits, deep sea dives, and street food across 4 continents."
+                joinCode={currentSquad?.id === 'trip-squad' ? 'TRIP26' : currentSquad?.id?.toUpperCase().slice(0, 6) || 'SQUAD1'}
+                onInvite={() => setIsCreateSquadOpen(true)}
+                onLeave={() => {
+                  setToastMessage(`You left ${currentSquad?.name || 'the squad'}.`);
+                  setTimeout(() => setToastMessage(null), 4000);
+                }}
+              />
+            )}
+          </div>
 
           {activeTab === 'personal' ? (
             /* ────── PERSONAL GOALS TAB ────── */
