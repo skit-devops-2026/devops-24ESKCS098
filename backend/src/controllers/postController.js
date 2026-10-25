@@ -233,8 +233,11 @@ async function createPost(req, res, next) {
       }
     }
 
-    // In-Memory Dev Store
-    const newId = inMemoryStore.posts.length > 0 ? Math.max(...inMemoryStore.posts.map((p) => p.id)) + 1 : 1;
+    // In-Memory Dev Store: Monotonic ID generation (never reuses deleted post IDs)
+    if (!inMemoryStore._nextPostId) {
+      inMemoryStore._nextPostId = inMemoryStore.posts.length > 0 ? Math.max(...inMemoryStore.posts.map((p) => p.id)) + 1 : 1;
+    }
+    const newId = inMemoryStore._nextPostId++;
     const newPost = {
       id: newId,
       type: 'solo',
@@ -333,6 +336,15 @@ async function deletePost(req, res, next) {
     const idx = inMemoryStore.posts.findIndex((p) => p.id === postId);
     if (idx === -1) return res.status(404).json({ success: false, message: 'Post not found' });
     inMemoryStore.posts.splice(idx, 1);
+
+    // Cascade delete associated comments and reactions for this post in dev store
+    if (Array.isArray(inMemoryStore.comments)) {
+      inMemoryStore.comments = inMemoryStore.comments.filter((c) => c.post_id !== postId);
+    }
+    if (Array.isArray(inMemoryStore.reactions)) {
+      inMemoryStore.reactions = inMemoryStore.reactions.filter((r) => r.post_id !== postId);
+    }
+
     res.json({ success: true, message: 'Post deleted' });
   } catch (err) {
     next(err);

@@ -62,12 +62,12 @@
   --shadow-brutal-xl: 8px 8px 0px 0px #000000;
   --shadow-brutal-sm: 2px 2px 0px 0px #000000;
 
-  --font-display: "Bricolage Grotesque", sans-serif;
-  --font-body: "Hanken Grotesk", sans-serif;
-  --font-mono: "Space Grotesk", monospace;
-  --font-bricolage: "Bricolage Grotesque", sans-serif;
-  --font-hanken: "Hanken Grotesk", sans-serif;
-  --font-space: "Space Grotesk", sans-serif;
+  --font-display: "Twemoji Country Flags", "Bricolage Grotesque", sans-serif;
+  --font-body: "Twemoji Country Flags", "Hanken Grotesk", sans-serif;
+  --font-mono: "Twemoji Country Flags", "Space Grotesk", monospace;
+  --font-bricolage: "Twemoji Country Flags", "Bricolage Grotesque", sans-serif;
+  --font-hanken: "Twemoji Country Flags", "Hanken Grotesk", sans-serif;
+  --font-space: "Twemoji Country Flags", "Space Grotesk", sans-serif;
 
   --text-display-xl: 64px;
   --text-display-xl--line-height: 1.1;
@@ -120,9 +120,22 @@
   --border-4: 4px;
 }
 
+@font-face {
+  font-family: 'Twemoji Country Flags';
+  src: url('https://cdn.jsdelivr.net/npm/country-flag-emoji-polyfill@0.1/dist/TwemojiCountryFlags.woff2') format('woff2');
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  font-display: swap;
+}
+
 @layer base {
   body {
     @apply bg-background text-on-background font-hanken;
+    font-family: 'Twemoji Country Flags', 'Hanken Grotesk', sans-serif;
+  }
+
+  input,
+  textarea {
+    font-family: 'Twemoji Country Flags', 'Hanken Grotesk', sans-serif;
   }
 
   h1,
@@ -132,6 +145,7 @@
   h5,
   h6 {
     @apply font-bricolage text-on-background;
+    font-family: 'Twemoji Country Flags', 'Bricolage Grotesque', sans-serif;
   }
 }
 
@@ -185,3 +199,69 @@
     border-radius: 9999px;
   }
 }
+
+/* Neo-Brutalist Custom Styling for EmojiPickerReact */
+.EmojiPickerReact {
+  --epr-bg-color: #FFFDF5 !important;
+  --epr-picker-border-color: transparent !important;
+  --epr-picker-border-radius: 0px !important;
+  --epr-category-label-bg-color: #FFFDF5 !important;
+  --epr-category-label-text-color: #1A1C1C !important;
+  --epr-search-input-bg-color: #FFFFFF !important;
+  --epr-search-input-bg-color-active: #FEFCE8 !important;
+  --epr-search-border-color: #000000 !important;
+  --epr-search-border-color-active: #000000 !important;
+  --epr-search-input-border-radius: 8px !important;
+  --epr-search-input-text-color: #000000 !important;
+  --epr-search-input-placeholder-color: #78716C !important;
+  --epr-category-icon-active-color: #000000 !important;
+  --epr-category-icon-inactive-color: #A8A29E !important;
+  --epr-hover-bg-color: #FFED00 !important;
+  --epr-focus-bg-color: #FEF08A !important;
+  --epr-highlight-color: #FFED00 !important;
+  --epr-preview-border-color: #000000 !important;
+  --epr-font-family: 'Space Grotesk', 'Hanken Grotesk', sans-serif !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.EmojiPickerReact input.epr-search-input {
+  border: 2px solid #000000 !important;
+  box-shadow: 2px 2px 0px 0px #000000 !important;
+  font-family: 'Hanken Grotesk', sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  transition: all 0.15s ease !important;
+}
+
+.EmojiPickerReact input.epr-search-input:focus {
+  background-color: #FEFCE8 !important;
+  box-shadow: 3px 3px 0px 0px #000000 !important;
+  outline: none !important;
+}
+
+.EmojiPickerReact .epr-cat-btn:hover {
+  background-color: #FFED00 !important;
+  border-radius: 6px !important;
+}
+
+.EmojiPickerReact .epr-cat-btn.epr-active {
+  border-bottom: 3px solid #000000 !important;
+}
+
+.EmojiPickerReact .epr-emoji-category-label {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  font-size: 11px !important;
+  padding: 8px 12px !important;
+  border-bottom: 2px dashed #000000 !important;
+}
+
+.EmojiPickerReact .epr-preview {
+  border-top: 2px solid #000000 !important;
+  background-color: #FFFDF5 !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+}
