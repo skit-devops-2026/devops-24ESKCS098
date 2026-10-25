@@ -1,4 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * BucketList.jsx
+ *
+ * This page connects entirely to the PostgreSQL-backed API via frontend/services/api.js.
+ * localStorage is NOT used for persistent goal data.
+ *
+ * Auth: In development the backend uses req.user.id = 1 (Alex Rivero) via the
+ * x-dev-user-id header. Set DEV_USER_ID below to any seeded user id for testing.
+ * In production replace the `devUserId` prop with a real token-based flow.
+ *
+ * Status values:
+ *   'not-started' | 'in-progress' | 'completed'
+ *   These are the frontend values; the backend maps them to DB values.
+ */
+
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 import BucketListHeader from '../components/bucketlist/BucketListHeader';
 import GoalFilters from '../components/bucketlist/GoalFilters';
@@ -15,93 +30,173 @@ import QuestCompletionModal from '../components/celebration/QuestCompletionModal
 import SquadMembersWidget from '../components/squad/SquadMembersWidget';
 
 import { STATUS_FILTERS } from '../components/bucketlist/constants';
-import {
-  loadPersonalGoals,
-  savePersonalGoals,
-  loadTeamGoals,
-  saveTeamGoals,
-  loadTeamRequests,
-  saveTeamRequests,
-  generateId,
-} from '../components/bucketlist/storage';
+import { api } from '../services/api';
 
-const INITIAL_SQUADS = [
-  {
-    id: 'trip-squad',
-    name: 'Trip Squad ✈️',
-    members: 6,
-    activeQuests: 12,
-    unreadCount: 3,
-    avatar: 'https://images.unsplash.com/photo-1528127269322-539801943592?w=150&q=80',
-    bgColor: 'bg-brand-pink',
-  },
-  {
-    id: 'college-gang',
-    name: 'College Gang 🎓',
-    members: 4,
-    activeQuests: 5,
-    unreadCount: 1,
-    avatar: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=150&q=80',
-    bgColor: 'bg-brand-cyan',
-  },
-  {
-    id: 'family-adventure',
-    name: 'Family Adventure 🏡',
-    members: 5,
-    activeQuests: 8,
-    unreadCount: 0,
-    avatar: null,
-    icon: '🏡',
-    bgColor: 'bg-brand-lime',
-  },
-];
+// ── Dev configuration ──────────────────────────────────────────────────────────
+// Change this to match a seeded user id when testing multi-user behaviour.
+// When real auth is implemented, replace this with the token from auth context.
+const DEV_USER_ID = 1;
+
+// ── Loading / Error skeleton ───────────────────────────────────────────────────
+
+function LoadingState() {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {[1, 2, 3, 4].map((n) => (
+        <div
+          key={n}
+          className="border-3 border-black rounded-xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] overflow-hidden bg-white animate-pulse"
+        >
+          <div className="p-8 space-y-4">
+            <div className="h-4 bg-gray-200 rounded w-1/4" />
+            <div className="h-6 bg-gray-200 rounded w-3/4" />
+            <div className="h-4 bg-gray-200 rounded w-full" />
+            <div className="h-4 bg-gray-200 rounded w-2/3" />
+          </div>
+          <div className="h-14 bg-gray-100 border-t-3 border-black" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ErrorState({ message, onRetry }) {
+  return (
+    <div className="py-16 bg-[#ffdad6] border-3 border-black rounded-xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-8 text-center space-y-4">
+      <span className="text-4xl">⚠️</span>
+      <p className="font-bricolage text-xl font-bold">Failed to load goals</p>
+      <p className="font-hanken text-sm text-[#93000a]">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="bg-black text-white font-space font-bold uppercase text-sm px-6 py-3 rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] hover:-translate-y-0.5 transition-all"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
+// ── BucketList Page ────────────────────────────────────────────────────────────
 
 function BucketList() {
-  // ── Tab State: 'personal' | 'team' ──────────────────────────
+  // ── Tab ──────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('personal');
 
-  // ── Squad State ─────────────────────────────────────────────
-  const [squads, setSquads] = useState(INITIAL_SQUADS);
-  const [activeSquadId, setActiveSquadId] = useState('trip-squad');
+  // ── Squads ───────────────────────────────────────────────────────────────
+  const [squads, setSquads] = useState([]);
+  const [squadsLoading, setSquadsLoading] = useState(true);
+  const [activeSquadId, setActiveSquadId] = useState(null);
   const [isCreateSquadOpen, setIsCreateSquadOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState(null);
 
-  // ── Personal Goals State (Persisted in localStorage) ────────
-  const [goals, setGoals] = useState(() => loadPersonalGoals());
+  // ── Personal Goals ────────────────────────────────────────────────────────
+  const [goals, setGoals] = useState([]);
+  const [goalsLoading, setGoalsLoading] = useState(true);
+  const [goalsError, setGoalsError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const [activeCategory, setActiveCategory] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState(null);
   const [drawerGoal, setDrawerGoal] = useState(null);
   const [celebrateGoal, setCelebrateGoal] = useState(null);
-  const [squadView, setSquadView] = useState('challenge'); // 'challenge' | 'roster'
-  const currentSquad = squads.find((s) => s.id === activeSquadId) || squads[0];
+  const [squadView, setSquadView] = useState('challenge');
 
-  // ── Team Goals State (Persisted in localStorage) ────────────
-  const [teamGoals, setTeamGoals] = useState(() => loadTeamGoals());
-  const [teamRequests, setTeamRequests] = useState(() => loadTeamRequests());
+  // ── Team Goals ────────────────────────────────────────────────────────────
+  const [teamGoals, setTeamGoals] = useState([]);
+  const [teamGoalsLoading, setTeamGoalsLoading] = useState(false);
+  const [teamGoalsError, setTeamGoalsError] = useState(null);
   const [teamActiveFilter, setTeamActiveFilter] = useState('all');
   const [teamActiveCategory, setTeamActiveCategory] = useState('all');
 
-  // ── Persist on change ────────────────────────────────────────
-  useEffect(() => {
-    savePersonalGoals(goals);
-  }, [goals]);
+  // ── UI state ──────────────────────────────────────────────────────────────
+  const [toastMessage, setToastMessage] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const toastTimerRef = useRef(null);
 
-  useEffect(() => {
-    saveTeamGoals(teamGoals);
-  }, [teamGoals]);
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const currentSquad = squads.find((s) => s.id === activeSquadId) || squads[0];
 
-  useEffect(() => {
-    saveTeamRequests(teamRequests);
-  }, [teamRequests]);
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  const showToast = useCallback((msg, duration = 5000) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastMessage(msg);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), duration);
+  }, []);
 
-  // ── Filtering (personal goals) ───────────────────────────────
+  // ── Load squads ───────────────────────────────────────────────────────────
+  const loadSquads = useCallback(async () => {
+    setSquadsLoading(true);
+    try {
+      const data = await api.getSquads({ devUserId: DEV_USER_ID });
+      const mapped = (data.squads || []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        members: s.members || 0,
+        activeQuests: s.active_quests || 0,
+        unreadCount: 0,
+        joinCode: s.join_code,
+        avatar: s.cover_url || null,
+        bgColor: 'bg-brand-yellow',
+        userRole: s.user_role,
+      }));
+      setSquads(mapped);
+      if (mapped.length && !activeSquadId) {
+        setActiveSquadId(mapped[0].id);
+      }
+    } catch {
+      // Squad loading failure is not fatal — we just show an empty sidebar
+      setSquads([]);
+    } finally {
+      setSquadsLoading(false);
+    }
+  }, [activeSquadId]);
+
+  // ── Load personal goals ───────────────────────────────────────────────────
+  const loadPersonalGoals = useCallback(async () => {
+    setGoalsLoading(true);
+    setGoalsError(null);
+    try {
+      const data = await api.getPersonalGoals({ devUserId: DEV_USER_ID });
+      setGoals(data.goals || []);
+    } catch (err) {
+      setGoalsError(err.message || 'Could not load your goals. Check backend connection.');
+    } finally {
+      setGoalsLoading(false);
+    }
+  }, []);
+
+  // ── Load team goals for active squad ─────────────────────────────────────
+  const loadTeamGoals = useCallback(async (squadId) => {
+    if (!squadId) return;
+    setTeamGoalsLoading(true);
+    setTeamGoalsError(null);
+    try {
+      const data = await api.getTeamGoals(squadId, { devUserId: DEV_USER_ID });
+      setTeamGoals(data.goals || []);
+    } catch (err) {
+      setTeamGoalsError(err.message || 'Could not load team goals.');
+    } finally {
+      setTeamGoalsLoading(false);
+    }
+  }, []);
+
+  // ── Initial fetch ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    loadSquads();
+    loadPersonalGoals();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load team goals whenever squad or tab changes ─────────────────────────
+  useEffect(() => {
+    if (activeTab === 'team' && activeSquadId) {
+      loadTeamGoals(activeSquadId);
+    }
+  }, [activeTab, activeSquadId, loadTeamGoals]);
+
+  // ── Personal goal filtering ───────────────────────────────────────────────
   const filteredGoals = goals.filter((goal) => {
-    const statusMatch =
-      activeFilter === 'all' || goal.status === activeFilter;
-    const categoryMatch =
-      activeCategory === 'all' || goal.category === activeCategory;
+    const statusMatch = activeFilter === 'all' || goal.status === activeFilter;
+    const categoryMatch = activeCategory === 'all' || goal.category === activeCategory;
     return statusMatch && categoryMatch;
   });
 
@@ -113,67 +208,227 @@ function BucketList() {
     [goals]
   );
 
-  // ── Handlers ────────────────────────────────────────────────
-  const handleAddGoal = (goalData) => {
-    const newGoal = {
-      ...goalData,
-      id: generateId('p'),
-      createdAt: new Date().toISOString(),
-    };
-    setGoals((prev) => [...prev, newGoal]);
-    setShowForm(false);
-    setActiveFilter('all');
-    setActiveCategory('all');
+  // ── Handlers: Personal Goals ──────────────────────────────────────────────
+
+  const handleAddGoal = async (goalData) => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const data = await api.createPersonalGoal(goalData, { devUserId: DEV_USER_ID });
+      setGoals((prev) => [data.goal, ...prev]);
+      setShowForm(false);
+      setActiveFilter('all');
+      setActiveCategory('all');
+      showToast(`✅ Goal "${data.goal.title}" created!`);
+    } catch (err) {
+      showToast(`❌ Failed to create goal: ${err.message}`, 6000);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleUpdateGoal = (updated) => {
-    setGoals((prev) =>
-      prev.map((g) => (g.id === updated.id ? updated : g))
-    );
-    setSelectedGoal(updated);
+  const handleUpdateGoal = async (updated) => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const data = await api.updatePersonalGoal(
+        updated.id,
+        {
+          title: updated.title,
+          description: updated.description,
+          category: updated.category,
+          difficulty: updated.difficulty,
+          visibility: updated.visibility,
+          deadline: updated.deadline,
+          priority: updated.priority,
+        },
+        { devUserId: DEV_USER_ID }
+      );
+      const saved = data.goal;
+      setGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
+      setSelectedGoal(saved);
+      // Also sync progress/status if changed
+      if (
+        updated.status !== saved.status ||
+        updated.progress !== saved.progress
+      ) {
+        await handleStatusUpdate(saved.id, updated.status, updated.progress);
+      }
+    } catch (err) {
+      showToast(`❌ Failed to save goal: ${err.message}`, 6000);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteGoal = (id) => {
-    setGoals((prev) => prev.filter((g) => g.id !== id));
-    setSelectedGoal(null);
+  const handleStatusUpdate = async (goalId, newStatus, progress) => {
+    try {
+      const data = await api.updateGoalStatus(
+        goalId,
+        { status: newStatus, progress },
+        { devUserId: DEV_USER_ID }
+      );
+      const saved = data.goal;
+      setGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
+      // Update selectedGoal if open
+      setSelectedGoal((prev) => (prev && prev.id === saved.id ? saved : prev));
+      return saved;
+    } catch (err) {
+      showToast(`❌ Status update failed: ${err.message}`, 6000);
+      return null;
+    }
   };
 
-  const handleQuickStatus = (id, newStatus) => {
-    setGoals((prev) =>
-      prev.map((g) => {
-        if (g.id === id) {
-          const updated = {
-            ...g,
-            status: newStatus,
-            progress:
-              newStatus === 'completed'
-                ? 100
-                : newStatus === 'not-started'
-                ? 0
-                : g.progress,
-          };
-          if (newStatus === 'completed') {
-            setCelebrateGoal(updated);
-          }
-          return updated;
-        }
-        return g;
-      })
-    );
+  const handleDeleteGoal = async (id) => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await api.deletePersonalGoal(id, { devUserId: DEV_USER_ID });
+      setGoals((prev) => prev.filter((g) => g.id !== id));
+      setSelectedGoal(null);
+      showToast('🗑️ Goal deleted.');
+    } catch (err) {
+      showToast(`❌ Failed to delete goal: ${err.message}`, 6000);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleCreateSquad = (newSquad) => {
-    setSquads((prev) => [
-      ...prev,
-      {
-        ...newSquad,
+  const handleQuickStatus = async (id, newStatus) => {
+    const progress =
+      newStatus === 'completed' ? 100 : newStatus === 'not-started' ? 0 : undefined;
+    const saved = await handleStatusUpdate(id, newStatus, progress);
+    if (saved && newStatus === 'completed') {
+      setCelebrateGoal(saved);
+    }
+  };
+
+  const handleSaveProgress = async (updated) => {
+    const saved = await handleStatusUpdate(updated.id, updated.status, updated.progress);
+    if (saved) {
+      showToast(`📈 Progress updated to ${saved.progress}% for "${saved.title}"!`);
+      if (saved.status === 'completed') {
+        setCelebrateGoal(saved);
+      }
+    }
+  };
+
+  // ── Handlers: Squad ───────────────────────────────────────────────────────
+
+  const handleCreateSquad = async (newSquadData) => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const data = await api.createSquad(
+        { name: newSquadData.name, description: newSquadData.description || '' },
+        { devUserId: DEV_USER_ID }
+      );
+      const squad = data.squad;
+      const mapped = {
+        id: squad.id,
+        name: squad.name,
+        members: squad.members || 1,
+        activeQuests: 0,
+        unreadCount: 0,
+        joinCode: squad.join_code,
+        avatar: null,
         bgColor: 'bg-brand-yellow',
-      },
-    ]);
-    setActiveSquadId(newSquad.id);
-    setToastMessage(`🎉 Squad "${newSquad.name}" created! Join code: ${newSquad.joinCode}`);
-    setTimeout(() => setToastMessage(null), 5000);
+        userRole: 'admin',
+      };
+      setSquads((prev) => [...prev, mapped]);
+      setActiveSquadId(mapped.id);
+      showToast(`🎉 Squad "${squad.name}" created! Join code: ${squad.join_code}`);
+      setIsCreateSquadOpen(false);
+    } catch (err) {
+      showToast(`❌ Failed to create squad: ${err.message}`, 6000);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  // ── Handlers: Team Goals ──────────────────────────────────────────────────
+
+  const handleAddTeamGoal = async (goalData) => {
+    if (!activeSquadId || submitting) return;
+    setSubmitting(true);
+    try {
+      const data = await api.createTeamGoal(activeSquadId, goalData, { devUserId: DEV_USER_ID });
+      setTeamGoals((prev) => [data.goal, ...prev]);
+      showToast(`✅ Team goal "${data.goal.title}" created!`);
+    } catch (err) {
+      showToast(`❌ Failed to create team goal: ${err.message}`, 6000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateTeamGoal = async (updated) => {
+    if (!activeSquadId || submitting) return;
+    setSubmitting(true);
+    try {
+      const data = await api.updateTeamGoal(
+        activeSquadId,
+        updated.id,
+        {
+          title: updated.title,
+          description: updated.description,
+          category: updated.category,
+          difficulty: updated.difficulty,
+          deadline: updated.deadline,
+          priority: updated.priority,
+        },
+        { devUserId: DEV_USER_ID }
+      );
+      const saved = data.goal;
+      setTeamGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
+      // Sync status/progress if changed
+      if (updated.status !== saved.status || updated.progress !== saved.progress) {
+        await handleUpdateTeamGoalStatus(saved.id, updated.status, updated.progress);
+      }
+    } catch (err) {
+      showToast(`❌ Failed to update team goal: ${err.message}`, 6000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateTeamGoalStatus = async (goalId, newStatus, progress) => {
+    if (!activeSquadId) return;
+    try {
+      const data = await api.updateTeamGoalStatus(
+        activeSquadId,
+        goalId,
+        { status: newStatus, progress },
+        { devUserId: DEV_USER_ID }
+      );
+      const saved = data.goal;
+      setTeamGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
+    } catch (err) {
+      showToast(`❌ Team goal status update failed: ${err.message}`, 6000);
+    }
+  };
+
+  const handleDeleteTeamGoal = async (id) => {
+    if (!activeSquadId || submitting) return;
+    setSubmitting(true);
+    try {
+      await api.deleteTeamGoal(activeSquadId, id, { devUserId: DEV_USER_ID });
+      setTeamGoals((prev) => prev.filter((g) => g.id !== id));
+      showToast('🗑️ Team goal deleted.');
+    } catch (err) {
+      showToast(`❌ Failed to delete team goal: ${err.message}`, 6000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleTeamQuickStatus = async (id, newStatus) => {
+    const progress = newStatus === 'completed' ? 100 : newStatus === 'not-started' ? 0 : undefined;
+    await handleUpdateTeamGoalStatus(id, newStatus, progress);
+  };
+
+  // ── Cleanup timer on unmount ──────────────────────────────────────────────
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
   return (
     <>
@@ -231,7 +486,10 @@ function BucketList() {
             <SquadSidebar
               squads={squads}
               activeSquadId={activeSquadId}
-              onSelectSquad={setActiveSquadId}
+              onSelectSquad={(id) => {
+                setActiveSquadId(id);
+                if (activeTab === 'team') loadTeamGoals(id);
+              }}
               selectedCategory={activeCategory === 'all' ? null : activeCategory}
               onSelectCategory={(cat) => setActiveCategory(cat || 'all')}
               onAddGroupClick={() => setIsCreateSquadOpen(true)}
@@ -240,7 +498,7 @@ function BucketList() {
         </aside>
 
         <div className="flex-1 space-y-8">
-          {/* Squad Creation Toast */}
+          {/* Toast */}
           {toastMessage && (
             <div className="p-4 bg-brand-yellow brutal-border-lg rounded-xl shadow-brutal flex items-center justify-between font-mono text-xs font-black animate-in slide-in-from-top-4">
               <div className="flex items-center gap-2 text-black">
@@ -259,15 +517,13 @@ function BucketList() {
 
           {/* Header with Personal vs Team Tab Switcher */}
           <BucketListHeader
-            totalGoals={
-              activeTab === 'personal' ? goals.length : teamGoals.length
-            }
+            totalGoals={activeTab === 'personal' ? goals.length : teamGoals.length}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             teamGoalCount={teamGoals.length}
           />
 
-          {/* Squad Showcase: Active Challenge vs Squad Members Roster */}
+          {/* Squad Showcase */}
           <div className="space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="inline-flex p-1 bg-white border-2 border-black rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -293,7 +549,7 @@ function BucketList() {
                       : 'text-black hover:bg-neutral-100'
                   }`}
                 >
-                  👥 Squad Roster ({currentSquad?.name || 'Trip Squad'})
+                  👥 Squad Roster ({currentSquad?.name || 'Select a Squad'})
                 </button>
               </div>
 
@@ -318,20 +574,18 @@ function BucketList() {
                   setDrawerGoal(activeGoal);
                 }}
                 onOpenDiscussion={() => {
-                  setToastMessage('💬 Squad discussion thread opened for Mt. Fuji summit quest!');
-                  setTimeout(() => setToastMessage(null), 4000);
+                  showToast('💬 Squad discussion thread opened for Mt. Fuji summit quest!', 4000);
                 }}
               />
             ) : (
               <SquadMembersWidget
-                squadName={currentSquad?.name || 'Trip Squad ✈️'}
+                squadName={currentSquad?.name || 'Select a Squad'}
                 category="ADVENTURE"
                 motto="6 globetrotters tackling summits, deep sea dives, and street food across 4 continents."
-                joinCode={currentSquad?.id === 'trip-squad' ? 'TRIP26' : currentSquad?.id?.toUpperCase().slice(0, 6) || 'SQUAD1'}
+                joinCode={currentSquad?.joinCode || currentSquad?.join_code || 'SQUAD1'}
                 onInvite={() => setIsCreateSquadOpen(true)}
                 onLeave={() => {
-                  setToastMessage(`You left ${currentSquad?.name || 'the squad'}.`);
-                  setTimeout(() => setToastMessage(null), 4000);
+                  showToast(`You left ${currentSquad?.name || 'the squad'}.`, 4000);
                 }}
               />
             )}
@@ -354,7 +608,11 @@ function BucketList() {
                 />
               )}
 
-              {filteredGoals.length === 0 ? (
+              {goalsLoading ? (
+                <LoadingState />
+              ) : goalsError ? (
+                <ErrorState message={goalsError} onRetry={loadPersonalGoals} />
+              ) : filteredGoals.length === 0 ? (
                 <div className="text-center py-16 bg-white brutal-border-lg rounded-xl shadow-brutal p-8">
                   <p className="font-bricolage text-2xl font-bold mb-2">
                     {goals.length === 0
@@ -386,13 +644,13 @@ function BucketList() {
                 </div>
               )}
 
-              {/* Goal Detail Modal (View, Edit, Checkpoints, Progress, Delete) */}
+              {/* Goal Detail Modal */}
               {selectedGoal && (
                 <GoalDetailModal
                   goal={selectedGoal}
                   onClose={() => setSelectedGoal(null)}
-                  onUpdate={(updated) => {
-                    handleUpdateGoal(updated);
+                  onUpdate={async (updated) => {
+                    await handleUpdateGoal(updated);
                     if (updated.status === 'completed' && updated.progress === 100) {
                       setCelebrateGoal(updated);
                     }
@@ -413,9 +671,13 @@ function BucketList() {
             /* ────── TEAM GOALS TAB ────── */
             <TeamGoalsView
               teamGoals={teamGoals}
-              setTeamGoals={setTeamGoals}
-              teamRequests={teamRequests}
-              setTeamRequests={setTeamRequests}
+              teamGoalsLoading={teamGoalsLoading}
+              teamGoalsError={teamGoalsError}
+              onRetry={() => loadTeamGoals(activeSquadId)}
+              onAddGoal={handleAddTeamGoal}
+              onUpdateGoal={handleUpdateTeamGoal}
+              onDeleteGoal={handleDeleteTeamGoal}
+              onQuickStatus={handleTeamQuickStatus}
               activeFilter={teamActiveFilter}
               setActiveFilter={setTeamActiveFilter}
               activeCategory={teamActiveCategory}
@@ -437,11 +699,7 @@ function BucketList() {
         isOpen={Boolean(drawerGoal)}
         goal={drawerGoal}
         onClose={() => setDrawerGoal(null)}
-        onSaveProgress={(updated) => {
-          handleUpdateGoal(updated);
-          setToastMessage(`📈 Progress updated to ${updated.progress}% for "${updated.title}"!`);
-          setTimeout(() => setToastMessage(null), 4000);
-        }}
+        onSaveProgress={handleSaveProgress}
         onOpenCelebration={(g) => {
           setDrawerGoal(null);
           setCelebrateGoal(g);
@@ -454,8 +712,7 @@ function BucketList() {
         goal={celebrateGoal}
         onClose={() => setCelebrateGoal(null)}
         onPostAchievement={(achievement) => {
-          setToastMessage(`🎉 Quest "${achievement.badge}" posted to Wall of Fame! (+${achievement.xpEarned} XP)`);
-          setTimeout(() => setToastMessage(null), 5000);
+          showToast(`🎉 Quest "${achievement.badge}" posted to Wall of Fame! (+${achievement.xpEarned} XP)`);
         }}
       />
     </>

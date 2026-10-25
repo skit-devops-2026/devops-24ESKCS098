@@ -6,8 +6,9 @@ async function initDb() {
   console.log('🔄 Initializing LifeQuest PostgreSQL database...');
   const client = await pool.connect();
   try {
-    const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
-    const seedSql = fs.readFileSync(path.join(__dirname, 'seed.sql'), 'utf-8');
+    const schemaSql    = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+    const seedSql      = fs.readFileSync(path.join(__dirname, 'seed.sql'), 'utf-8');
+    const migrationSql = fs.readFileSync(path.join(__dirname, 'migrations', '001_bucketlist_progress.sql'), 'utf-8');
 
     console.log('📦 Executing schema.sql...');
     await client.query(schemaSql);
@@ -16,6 +17,10 @@ async function initDb() {
     console.log('🌱 Executing seed.sql...');
     await client.query(seedSql);
     console.log('✅ Seed data inserted successfully.');
+
+    console.log('🔄 Executing migrations...');
+    await client.query(migrationSql);
+    console.log('✅ Migrations applied successfully.');
 
     console.log('🎉 Database initialization complete!');
   } catch (err) {
