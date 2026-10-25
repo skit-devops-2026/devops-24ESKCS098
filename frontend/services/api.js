@@ -80,6 +80,12 @@ export const api = {
     });
   },
 
+  deleteComment: async (commentId) => {
+    return request(`/comments/${commentId}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Leaderboard
   getLeaderboard: async ({ period = 'all-time', search = '', limit = 10 } = {}) => {
     const params = new URLSearchParams();

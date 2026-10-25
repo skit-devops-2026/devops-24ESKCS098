@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import api from '../services/api';
 
 const REACTION_OPTIONS = [
@@ -19,6 +20,10 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [userReaction, setUserReaction] = useState(item.userReaction || null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const commentInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
+  const emojiButtonRef = useRef(null);
   const [reactionCounts, setReactionCounts] = useState(
     item.reactionCounts || {
       '🔥': item.reactions?.includes('🔥') ? 5 : 0,
@@ -30,14 +35,64 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
   const rotateClass = item.id % 2 === 1 ? 'rotate-1' : '-rotate-1';
 
-  // Handle escape key to close delete modal
+  // Keep state in sync with updated/replaced item
+  useEffect(() => {
+    setComments(item.commentList || []);
+    setLikes(item.likes || 0);
+    setHasLiked(item.hasLiked || false);
+    setUserReaction(item.userReaction || null);
+    if (item.reactionCounts) {
+      setReactionCounts(item.reactionCounts);
+    }
+  }, [item.id, item.commentList]);
+
+  // Handle escape key to close delete modal or emoji picker
   useEffect(() => {
     function handleKeyDown(e) {
-      if (e.key === 'Escape' && showDeleteModal) setShowDeleteModal(false);
+      if (e.key === 'Escape') {
+        if (showEmojiPicker) setShowEmojiPicker(false);
+        if (showDeleteModal) setShowDeleteModal(false);
+      }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showDeleteModal]);
+  }, [showDeleteModal, showEmojiPicker]);
+
+  // Handle click outside to close emoji picker
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target) &&
+        emojiButtonRef.current &&
+        !emojiButtonRef.current.contains(e.target)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    }
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
+
+  // Insert emoji at cursor position into comment input
+  const handleAddEmoji = (emoji) => {
+    if (!commentInputRef.current) {
+      setNewComment((prev) => prev + emoji);
+      return;
+    }
+    const input = commentInputRef.current;
+    const start = input.selectionStart ?? newComment.length;
+    const end = input.selectionEnd ?? newComment.length;
+    const updated = newComment.substring(0, start) + emoji + newComment.substring(end);
+    setNewComment(updated);
+
+    setTimeout(() => {
+      input.focus();
+      input.setSelectionRange(start + emoji.length, start + emoji.length);
+    }, 0);
+  };
 
   // Toggle Like (Reactions API)
   const handleToggleLike = async () => {
@@ -112,6 +167,20 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
       }
     } catch (err) {
       console.warn('Could not persist comment to backend:', err.message);
+    }
+  };
+
+  // Delete Comment
+  const handleDeleteComment = async (commentId) => {
+    // Optimistic UI update
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+
+    try {
+      if (commentId) {
+        await api.deleteComment(commentId);
+      }
+    } catch (err) {
+      console.warn('Could not delete comment from backend:', err.message);
     }
   };
 
@@ -350,39 +419,115 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
       {showComments && (
         <div className="flex flex-col gap-3 pt-4 border-t-3 border-black text-sm">
           <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-            {comments.map((c, i) => (
+            {comments.map((c) => (
               <div
-                key={i}
-                className="p-2.5 bg-gray-50 border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs flex justify-between items-start gap-2"
+                key={c.id || c.text}
+                className="group/comm p-2.5 bg-gray-50 hover:bg-amber-50/50 border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs flex justify-between items-center gap-2 transition-all"
               >
-                <div>
+                <div className="flex-1 min-w-0 pr-1">
                   <span className={`font-bricolage font-black uppercase ${c.color || 'text-black'}`}>
                     {c.name}:
                   </span>{' '}
-                  <span className="font-hanken font-medium text-black">{c.text}</span>
+                  <span className="font-hanken font-medium text-black break-words">{c.text}</span>
                 </div>
-                {c.time && (
-                  <span className="text-[10px] font-space text-black/50 shrink-0">{c.time}</span>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {c.time && (
+                    <span className="text-[10px] font-space text-black/50">{c.time}</span>
+                  )}
+                  {/* Delete Comment Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteComment(c.id)}
+                    className="opacity-60 group-hover/comm:opacity-100 p-1 hover:bg-[#ffdad6] text-black/60 hover:text-[#ba1a1a] border border-transparent hover:border-black rounded transition-all cursor-pointer"
+                    title="Delete Comment"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* Add Comment Input Form */}
-          <form onSubmit={handleCommentSubmit} className="flex gap-2 mt-1">
-            <input
-              type="text"
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Drop some props or cheer them on..."
-              className="flex-1 px-3 py-2 border-2 border-black rounded-lg font-hanken text-xs focus:outline-none focus:bg-amber-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-black text-white font-space font-bold text-xs uppercase border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#ffed00] hover:text-black hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer"
-            >
-              Post
-            </button>
+          {/* Neo-Brutalist Unified Comment Input Capsule */}
+          <form onSubmit={handleCommentSubmit} className="relative mt-2">
+            <div className="flex items-center bg-white border-3 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus-within:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] focus-within:-translate-y-0.5 transition-all p-1 gap-1.5">
+              {/* Emoji Picker Toggle Button */}
+              <button
+                ref={emojiButtonRef}
+                type="button"
+                onClick={() => setShowEmojiPicker((prev) => !prev)}
+                className={`w-9 h-9 shrink-0 flex items-center justify-center text-lg rounded-lg border-2 border-black transition-all cursor-pointer ${
+                  showEmojiPicker
+                    ? 'bg-brand-yellow shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] scale-95'
+                    : 'bg-[#FFFDF5] hover:bg-brand-yellow hover:scale-105 active:scale-95 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                }`}
+                title="Choose Emoji"
+                aria-label="Choose Emoji"
+              >
+                😀
+              </button>
+
+              {/* Text Input */}
+              <input
+                ref={commentInputRef}
+                type="text"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Drop some props or cheer them on..."
+                className="flex-1 px-2.5 py-1.5 font-hanken text-xs text-black placeholder:text-black/45 bg-transparent focus:outline-none"
+              />
+
+              {/* Post Button */}
+              <button
+                type="submit"
+                className="px-5 py-2 bg-black text-white hover:bg-brand-yellow hover:text-black font-space font-black text-xs uppercase tracking-wider rounded-lg border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] active:scale-95 transition-all cursor-pointer shrink-0"
+              >
+                Post
+              </button>
+            </div>
+
+            {/* Neo-Brutalist Emoji Drawer Popover */}
+            {showEmojiPicker && (
+              <div
+                ref={emojiPickerRef}
+                className="absolute bottom-[calc(100%+10px)] left-0 z-50 w-full sm:w-[360px] bg-[#FFFDF5] border-3 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+              >
+                {/* Header Banner */}
+                <div className="flex items-center justify-between px-4 py-2 bg-brand-yellow border-b-3 border-black">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-black" />
+                    <span className="font-space font-black text-xs uppercase tracking-wider text-black">
+                      Pick an Emoji
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(false)}
+                    className="w-6 h-6 flex items-center justify-center font-black text-xs bg-white hover:bg-black hover:text-white border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Emoji Picker Body */}
+                <EmojiPicker
+                  onEmojiClick={(emojiData) => handleAddEmoji(emojiData.emoji)}
+                  autoFocusSearch={false}
+                  theme={Theme.LIGHT}
+                  emojiStyle={EmojiStyle.APPLE}
+                  searchPlaceHolder="Search emojis (smile, dog, fire...)"
+                  width="100%"
+                  height={400}
+                  lazyLoadEmojis={true}
+                  previewConfig={{
+                    showPreview: true,
+                  }}
+                />
+              </div>
+            )}
           </form>
         </div>
       )}
