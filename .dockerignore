@@ -1,0 +1,12 @@
+node_modules
+backend/node_modules
+.git
+.github
+*.md
+docs
+monitoring
+k8s
+.env*
+!.env.example
+dist
+.vite

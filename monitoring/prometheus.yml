@@ -1,0 +1,40 @@
+# ============================================
+# Prometheus Configuration — LifeQuest
+# ============================================
+# Scrape metrics from the backend API and any
+# exporters added alongside the application.
+# ============================================
+
+global:
+  scrape_interval: 15s        # How often to pull metrics
+  evaluation_interval: 15s    # How often to evaluate rules
+  scrape_timeout: 10s         # Per-target timeout
+
+# ── Alertmanager (optional, add when ready) ──
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+# ── Rule Files ───────────────────────────────
+# rule_files:
+#   - "alert_rules.yml"
+
+# ── Scrape Targets ───────────────────────────
+scrape_configs:
+  # Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # LifeQuest Backend API
+  - job_name: "lifequest-backend"
+    metrics_path: "/api/health"
+    static_configs:
+      - targets: ["backend:5000"]
+    scrape_interval: 10s
+
+  # Node Exporter (system-level metrics — optional)
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
