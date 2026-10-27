@@ -86,12 +86,22 @@ function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectS
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full brutal-border-sm ${squad.bgColor} flex items-center justify-center text-black font-black text-sm overflow-hidden shrink-0`}>
+                <div className={`w-10 h-10 rounded-full brutal-border-sm ${squad.bgColor || 'bg-brand-yellow'} flex items-center justify-center text-black font-black text-sm overflow-hidden shrink-0`}>
                   {squad.avatar ? (
-                    <img alt={squad.name} className="w-full h-full object-cover" src={squad.avatar} />
-                  ) : (
-                    <span>{squad.icon}</span>
-                  )}
+                    <img
+                      alt={squad.name}
+                      className="w-full h-full object-cover"
+                      src={squad.avatar}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallbackSpan = e.currentTarget.nextElementSibling;
+                        if (fallbackSpan) fallbackSpan.style.display = 'inline';
+                      }}
+                    />
+                  ) : null}
+                  <span style={{ display: squad.avatar ? 'none' : 'inline' }}>
+                    {squad.icon || (squad.name ? squad.name.charAt(0).toUpperCase() : '👥')}
+                  </span>
                 </div>
                 <div>
                   <div className="font-display font-black text-sm leading-tight">{squad.name}</div>

@@ -417,18 +417,18 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
 
             {/* Live Image Preview */}
             {imageUrl && (
-              <div className="relative h-44 w-full border-3 border-black rounded-xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-black group">
+              <div className="relative w-full max-h-64 border-3 border-black rounded-xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-neutral-900">
                 <img
                   alt="Proof Preview"
                   src={imageUrl}
-                  className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                  className="w-full h-auto max-h-64 object-cover block"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
                     e.currentTarget.src =
                       'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces';
                   }}
                 />
-                <div className="absolute top-2 left-2 px-2.5 py-1 bg-black/85 text-white border border-white rounded font-space font-black text-[10px] uppercase shadow">
+                <div className="absolute top-2 left-2 z-20 px-2.5 py-1 bg-black/85 text-white border border-white rounded font-space font-black text-[10px] uppercase shadow">
                   ✅ Photo Ready
                 </div>
               </div>

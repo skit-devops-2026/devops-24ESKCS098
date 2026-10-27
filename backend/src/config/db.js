@@ -1,34 +1,48 @@
-const { Pool } = require('pg');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('sslmode=require')
-    ? { rejectUnauthorized: false }
-    : false,
-  connectionTimeoutMillis: 3000,
-});
+const MONGODB_URI =
+  process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/lifequest';
 
-// Guard against unhandled error events emitted by idle pool clients
-pool.on('error', (err) => {
-  isPgConnected = false;
-  // Intentionally caught so the server process won't crash when DB is unreachable
-});
+let isMongoConnected = false;
 
-let isPgConnected = false;
-
-// Test connection on boot
-pool.query('SELECT 1')
+// Connect to MongoDB
+mongoose
+  .connect(MONGODB_URI, {
+    serverSelectionTimeoutMS: 3000,
+  })
   .then(() => {
-    isPgConnected = true;
-    console.log('✅ Connected to PostgreSQL database successfully.');
+    isMongoConnected = true;
+    console.log('✅ Connected to MongoDB database successfully.');
   })
   .catch((err) => {
-    isPgConnected = false;
-    console.warn('⚠️  PostgreSQL connection not established (' + err.message + ').');
+    isMongoConnected = false;
+    console.warn(`⚠️  MongoDB connection not established (${err.message}).`);
     console.info('💡 Running with robust in-memory dev database store so all endpoints work immediately.');
-    console.info('👉 Set a valid DATABASE_URL in backend/.env to connect to your real PostgreSQL database.');
+    console.info('👉 Set a valid MONGODB_URI in backend/.env to connect to your real MongoDB database or Atlas cluster.');
   });
+
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err.message);
+  isMongoConnected = false;
+});
+
+mongoose.connection.on('disconnected', () => {
+  isMongoConnected = false;
+});
+
+// Legacy PostgreSQL pool fallback stub (for backward compatibility during team migration)
+let isPgConnected = false;
+const pool = {
+  query: async () => {
+    throw new Error('PostgreSQL pool is deprecated. Please migrate to Mongoose models.');
+  },
+  connect: async () => ({
+    query: async () => {},
+    release: () => {},
+  }),
+  on: () => {},
+};
 
 // In-Memory Dev Store Fallback
 const inMemoryStore = {
@@ -42,9 +56,27 @@ const inMemoryStore = {
     { id: 7, name: 'Riya Sharma', email: 'riya@lifequest.app', avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&q=80', bio: 'Travel writer & storyteller.' }
   ],
   groups: [
-    { id: 1, name: 'Trip Squad ✈️', join_code: 'LQ-TRIP' },
-    { id: 2, name: 'College Gang 🎓', join_code: 'LQ-CLG1' },
-    { id: 3, name: 'Fitness Freaks 🏋️', join_code: 'LQ-FITN' }
+    {
+      id: 1,
+      name: 'Trip Squad ✈️',
+      description: 'Weekend warriors & world explorers',
+      cover_url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&q=80',
+      join_code: 'LQ-TRIP',
+    },
+    {
+      id: 2,
+      name: 'College Gang 🎓',
+      description: 'Alma mater reunion quest crew',
+      cover_url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&q=80',
+      join_code: 'LQ-CLG1',
+    },
+    {
+      id: 3,
+      name: 'Fitness Freaks 🏋️',
+      description: 'Cardio endurance and marathons',
+      cover_url: 'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=600&q=80',
+      join_code: 'LQ-FITN',
+    },
   ],
   posts: [
     {
@@ -131,7 +163,9 @@ const inMemoryStore = {
 };
 
 module.exports = {
+  mongoose,
   pool,
+  isMongoConnected: () => isMongoConnected,
   isPgConnected: () => isPgConnected,
   inMemoryStore,
   query: (text, params) => pool.query(text, params),
