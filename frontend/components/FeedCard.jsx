@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
+import api from '../services/api';
 
 const REACTION_OPTIONS = [
   { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100', type: 'fire' },
@@ -117,15 +118,25 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
     }, 0);
   };
 
-  // Toggle Like
-  const handleToggleLike = () => {
+  // Toggle Like (Reactions API)
+  const handleToggleLike = async () => {
     const nextLiked = !hasLiked;
     setHasLiked(nextLiked);
     setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+
+    try {
+      if (nextLiked) {
+        await api.upsertReaction(item.id, 'like');
+      } else {
+        await api.deleteReaction(item.id);
+      }
+    } catch (e) {
+      console.warn('Could not sync like with backend:', e.message);
+    }
   };
 
   // Add / Change Reaction
-  const handleSelectReaction = (emoji, type) => {
+  const handleSelectReaction = async (emoji, type) => {
     const selectedType = type || getReactionType(emoji) || 'fire';
     const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
     const currentUserType = getReactionType(userReaction);
@@ -167,10 +178,20 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
       return next;
     });
     setShowReactionPicker(false);
+
+    try {
+      if (isDeselect) {
+        await api.deleteReaction(item.id);
+      } else {
+        await api.upsertReaction(item.id, selectedType);
+      }
+    } catch (e) {
+      console.warn('Could not sync reaction with backend:', e.message);
+    }
   };
 
   // Submit Comment
-  const handleCommentSubmit = (e) => {
+  const handleCommentSubmit = async (e) => {
     e.preventDefault();
     const text = newComment.trim();
     if (!text) return;
@@ -187,11 +208,31 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
     setComments((prev) => [...prev, tempComment]);
     setNewComment('');
+
+    try {
+      const res = await api.addComment(item.id, text);
+      if (res && res.comment) {
+        setComments((prev) =>
+          prev.map((c) => (c.id === tempComment.id ? res.comment : c))
+        );
+      }
+    } catch (err) {
+      console.warn('Could not persist comment to backend:', err.message);
+    }
   };
 
   // Delete Comment
-  const handleDeleteComment = (commentId) => {
+  const handleDeleteComment = async (commentId) => {
+    // Optimistic UI update
     setComments((prev) => prev.filter((c) => c.id !== commentId));
+
+    try {
+      if (commentId) {
+        await api.deleteComment(commentId);
+      }
+    } catch (err) {
+      console.warn('Could not delete comment from backend:', err.message);
+    }
   };
 
 
@@ -274,10 +315,10 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
       {/* Proof Media Photo (Sec 4 Proof Upload) */}
       {item.image && typeof item.image === 'string' && item.image.trim() !== '' && (
-        <div className="relative w-full border-3 border-black rounded-xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-neutral-900">
+        <div className="relative h-72 border-3 border-black rounded-lg overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group bg-black">
           <img
             alt={item.badge || 'Achievement Proof'}
-            className="w-full h-auto max-h-[500px] object-cover block"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-95 group-hover:opacity-100"
             src={item.image}
             onError={(e) => {
               e.currentTarget.onerror = null;
@@ -286,7 +327,7 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
             }}
           />
           {item.completionDate && (
-            <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/85 text-white border-2 border-white rounded-lg font-space font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-md pointer-events-none">
+            <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/85 text-white border-2 border-white rounded font-space font-bold text-xs uppercase tracking-wider backdrop-blur-sm shadow-md">
               🗓️ {item.completionDate}
             </div>
           )}

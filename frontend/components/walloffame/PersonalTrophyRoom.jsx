@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import api from '../../services/api';
 
 const PERSONAL_STATS = {
   totalQuests: 6,
@@ -220,52 +221,44 @@ const COMPLETED_ITEMS = [
   },
 ];
 
-function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
-  const [stats] = useState(PERSONAL_STATS);
-  const [badges] = useState(ALL_BADGES);
+function PersonalTrophyRoom({ refreshTrigger = 0 }) {
+  const [stats, setStats] = useState(PERSONAL_STATS);
+  const [badges, setBadges] = useState(ALL_BADGES);
   const [badgeFilter, setBadgeFilter] = useState('ALL'); // 'ALL' | 'UNLOCKED' | 'LOCKED'
+  const [items, setItems] = useState(COMPLETED_ITEMS);
   const [filterCategory, setFilterCategory] = useState('ALL');
 
-  // Convert newly created posts by Alex into authentic trophy conquest cards
-  const newConquests = (userPosts || [])
-    .filter((p) => p && (p.isOwner || p.name?.includes('Alex Rivero') || (typeof p.id === 'number' && p.id > 100)))
-    .filter((p) => !COMPLETED_ITEMS.some((c) => c.postId === p.id))
-    .map((p) => ({
-      id: `comp-${p.id}`,
-      postId: p.id,
-      title: p.title || p.badge || 'Milestone Conquered',
-      category: p.category || 'ADVENTURE',
-      squad: p.squadName || (p.isSolo ? 'Solo Quest 👤' : 'Trip Squad ✈️'),
-      completedDate: p.completionDate || 'Just now',
-      image:
-        p.image ||
-        'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces',
-      stat: p.statBadge || 'Milestone Conquered',
-      note: p.subtitle || p.caption || p.note || 'Conquered quest with glory!',
-      isPrivate: false,
-      xp: p.xpEarned || p.xp || 250,
-    }));
+  useEffect(() => {
+    let isMounted = true;
+    api.getMyTrophyRoom(filterCategory)
+      .then((data) => {
+        if (!isMounted || !data) return;
+        if (data.stats) setStats(data.stats);
+        if (Array.isArray(data.badges) && data.badges.length > 0) setBadges(data.badges);
+        if (Array.isArray(data.completedItems)) setItems(data.completedItems);
+      })
+      .catch((err) => {
+        console.info('Using local trophy room cache:', err.message);
+      });
+    return () => { isMounted = false; };
+  }, [filterCategory, refreshTrigger]);
 
-  const [privacyMap, setPrivacyMap] = useState({});
+  const togglePrivacy = async (id) => {
+    const targetItem = items.find((it) => it.id === id);
+    const newIsPrivate = !targetItem?.isPrivate;
 
-  const togglePrivacy = (id) => {
-    setPrivacyMap((prev) => ({
-      ...prev,
-      [id]: prev[id] !== undefined ? !prev[id] : true,
-    }));
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, isPrivate: newIsPrivate } : item))
+    );
+
+    if (targetItem?.postId) {
+      try {
+        await api.updatePostVisibility(targetItem.postId, newIsPrivate ? 'personal' : 'shared');
+      } catch (e) {
+        console.warn('Could not sync privacy to backend:', e.message);
+      }
+    }
   };
-
-  const rawItems = [...newConquests, ...COMPLETED_ITEMS];
-  const items = rawItems.map((item) => ({
-    ...item,
-    isPrivate: privacyMap[item.id] !== undefined ? privacyMap[item.id] : item.isPrivate,
-  }));
-
-  const totalQuests = 6 + newConquests.length;
-  const OTHER_USERS_XP = [2250, 1800, 1550, 1400, 1200, 1050];
-  const rankNum = OTHER_USERS_XP.filter((xp) => xp > userXp).length + 1;
-  const currentRank = `#${rankNum}`;
-  const totalXp = `${userXp.toLocaleString()} XP`;
 
   const filteredItems =
     filterCategory === 'ALL'
@@ -317,15 +310,15 @@ function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-white border-2 border-black p-3 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] text-center">
               <p className="font-space font-bold text-[11px] uppercase text-black/60">Conquests</p>
-              <p className="font-bricolage font-black text-2xl text-black">{totalQuests}</p>
+              <p className="font-bricolage font-black text-2xl text-black">{stats.totalQuests}</p>
             </div>
             <div className="bg-white border-2 border-black p-3 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] text-center">
               <p className="font-space font-bold text-[11px] uppercase text-black/60">Total XP</p>
-              <p className="font-bricolage font-black text-xl text-[#b60055]">{totalXp}</p>
+              <p className="font-bricolage font-black text-xl text-[#b60055]">{stats.totalXp}</p>
             </div>
             <div className="bg-white border-2 border-black p-3 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] text-center">
               <p className="font-space font-bold text-[11px] uppercase text-black/60">Global Rank</p>
-              <p className="font-bricolage font-black text-2xl text-black">{currentRank}</p>
+              <p className="font-bricolage font-black text-2xl text-black">{stats.currentRank}</p>
             </div>
             <div className="bg-white border-2 border-black p-3 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] text-center">
               <p className="font-space font-bold text-[11px] uppercase text-black/60">Streak</p>

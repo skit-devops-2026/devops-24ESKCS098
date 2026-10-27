@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Leaderboard from '../components/Leaderboard';
 import FeedCard from '../components/FeedCard';
 import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
 import FullLeaderboardModal from '../components/walloffame/FullLeaderboardModal';
 import PersonalTrophyRoom from '../components/walloffame/PersonalTrophyRoom';
 import ShareableCardModal from '../components/walloffame/ShareableCardModal';
+import api from '../services/api';
 
 const INITIAL_FEED_ITEMS = [
   {
@@ -91,105 +92,87 @@ const FILTERS = [
   { key: 'this-week', label: 'This Week', activeBg: 'bg-[#ffdad6] text-black' },
 ];
 
-const BASE_XP = 1950;
-const INITIAL_POST_IDS = new Set([1, 2, 3]);
-
-const computeXpFromPosts = (posts) => {
-  if (!Array.isArray(posts)) return BASE_XP;
-  const addedXp = posts
-    .filter((p) => p && (p.isOwner || (typeof p.id === 'number' && p.id > 100)))
-    .filter((p) => !INITIAL_POST_IDS.has(p.id))
-    .reduce((sum, p) => sum + (Number(p.xpEarned || p.xp) || 250), 0);
-  return BASE_XP + addedXp;
-};
-
 function WallOfFame() {
   const [viewMode, setViewMode] = useState('squad-feed'); // 'squad-feed' | 'trophy-room'
-  const [feedItems, setFeedItems] = useState(() => {
-    try {
-      const saved = localStorage.getItem('lifequest_walloffame_posts_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_FEED_ITEMS;
-  });
-  const [weeklyQuestsCount, setWeeklyQuestsCount] = useState(() => {
-    try {
-      const saved = localStorage.getItem('lifequest_weekly_count_v1');
-      if (saved) return parseInt(saved, 10);
-    } catch {}
-    return 18;
-  });
+  const [feedItems, setFeedItems] = useState(INITIAL_FEED_ITEMS);
+  const [weeklyQuestsCount, setWeeklyQuestsCount] = useState(18);
   const [activeFilter, setActiveFilter] = useState('all');
   const [isCelebrateOpen, setIsCelebrateOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [shareItem, setShareItem] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
-  const [userXp, setUserXp] = useState(() => {
-    try {
-      const saved = localStorage.getItem('lifequest_walloffame_posts_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return computeXpFromPosts(parsed);
+  const [refreshLeaderboardTrigger, setRefreshLeaderboardTrigger] = useState(0);
+
+  // Live Backend Feed & Weekly Stats Fetching
+  useEffect(() => {
+    let isMounted = true;
+    api.getFeed(activeFilter)
+      .then((data) => {
+        if (isMounted && data && Array.isArray(data.posts) && data.posts.length > 0) {
+          setFeedItems(data.posts);
         }
-      }
-    } catch {}
-    return BASE_XP;
-  });
+      })
+      .catch((err) => {
+        console.info('Backend offline or initializing; displaying cached feed items:', err.message);
+      });
 
-  const handlePostAchievement = (newItem) => {
-    const isSolo = newItem.squadName?.toLowerCase().includes('solo') || newItem.isSolo;
-    const addedXp = Number(newItem.xpEarned) || 250;
+    api.getWeeklyStats()
+      .then((data) => {
+        if (isMounted && data && typeof data.count === 'number') {
+          setWeeklyQuestsCount(data.count || 18);
+        }
+      })
+      .catch(() => {});
 
-    const createdItem = {
-      ...newItem,
-      id: Date.now(),
-      name: 'Alex Rivero (You)',
-      isOwner: true,
-      squadName: isSolo ? 'Solo Quest 👤' : (newItem.squadName || 'Trip Squad'),
-      xpEarned: addedXp,
-      completionDate: 'Just now',
+    return () => {
+      isMounted = false;
     };
+  }, [activeFilter]);
 
-    const nextFeed = [createdItem, ...feedItems];
-    const nextXp = computeXpFromPosts(nextFeed);
-    const nextWeekly = weeklyQuestsCount + 1;
-
-    setFeedItems(nextFeed);
-    setUserXp(nextXp);
-    setWeeklyQuestsCount(nextWeekly);
-
+  const handlePostAchievement = async (newItem) => {
     try {
-      localStorage.setItem('lifequest_walloffame_posts_v2', JSON.stringify(nextFeed));
-      localStorage.setItem('lifequest_user_xp_v1', String(nextXp));
-      localStorage.setItem('lifequest_weekly_count_v1', String(nextWeekly));
-    } catch {}
-
-    setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${addedXp} XP)`);
+      const isSolo = newItem.squadName?.toLowerCase().includes('solo') || newItem.isSolo;
+      const res = await api.createPost({
+        title: newItem.title || newItem.badge,
+        caption: newItem.subtitle,
+        badgeLabel: newItem.badge,
+        category: newItem.category || 'ADVENTURE',
+        statBadge: newItem.statBadge,
+        groupId: isSolo ? null : (newItem.groupId || 1),
+        type: isSolo ? 'solo' : 'group',
+        imageUrls: newItem.image ? [newItem.image] : [],
+        proofImages: newItem.image ? [newItem.image] : [],
+        image: newItem.image,
+        xp: newItem.xpEarned || 250,
+        visibility: 'shared',
+        taggedFriendIds: newItem.taggedFriends?.map((_, i) => i + 2) || [],
+      });
+      const createdItem = res && res.post ? {
+        ...newItem,
+        id: res.post.id,
+        squadName: isSolo ? 'Solo Quest 👤' : (newItem.squadName || 'Trip Squad'),
+        xpEarned: res.post.xp_earned || newItem.xpEarned,
+      } : newItem;
+      setFeedItems((prev) => [createdItem, ...prev]);
+      setRefreshLeaderboardTrigger((prev) => prev + 1);
+    } catch {
+      // Offline fallback
+      setFeedItems((prev) => [newItem, ...prev]);
+      setRefreshLeaderboardTrigger((prev) => prev + 1);
+    }
+    setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${newItem.xpEarned} XP)`);
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const handleDeletePost = (postId) => {
-    const target = feedItems.find((p) => p.id === postId);
-    const subXp = Number(target?.xpEarned || target?.xp) || 250;
-    const nextFeed = feedItems.filter((p) => p.id !== postId);
-    const nextXp = computeXpFromPosts(nextFeed);
-    const nextWeekly = Math.max(18, weeklyQuestsCount - 1);
-
-    setFeedItems(nextFeed);
-    setUserXp(nextXp);
-    setWeeklyQuestsCount(nextWeekly);
-
+  const handleDeletePost = async (postId) => {
     try {
-      localStorage.setItem('lifequest_walloffame_posts_v2', JSON.stringify(nextFeed));
-      localStorage.setItem('lifequest_user_xp_v1', String(nextXp));
-      localStorage.setItem('lifequest_weekly_count_v1', String(nextWeekly));
-    } catch {}
-
-    setToastMessage(`🗑️ Post deleted successfully! (-${subXp} XP)`);
+      await api.deletePost(postId);
+    } catch (err) {
+      console.warn('Backend delete failed (or in offline mode):', err.message);
+    }
+    setFeedItems((prev) => prev.filter((p) => p.id !== postId));
+    setRefreshLeaderboardTrigger((prev) => prev + 1);
+    setToastMessage('🗑️ Post deleted successfully!');
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -345,7 +328,7 @@ function WallOfFame() {
             {/* Leaderboard Column */}
             <aside className="lg:col-span-1">
               <Leaderboard
-                userXp={userXp}
+                refreshTrigger={refreshLeaderboardTrigger}
                 onViewFullRankings={() => setIsLeaderboardOpen(true)}
               />
             </aside>
@@ -354,10 +337,7 @@ function WallOfFame() {
       ) : (
         /* Personal Achievement Log (Section 4) */
         <div className="pt-8">
-          <PersonalTrophyRoom
-            userXp={userXp}
-            userPosts={feedItems}
-          />
+          <PersonalTrophyRoom refreshTrigger={refreshLeaderboardTrigger} />
         </div>
       )}
 
@@ -371,7 +351,6 @@ function WallOfFame() {
       <FullLeaderboardModal
         isOpen={isLeaderboardOpen}
         onClose={() => setIsLeaderboardOpen(false)}
-        userXp={userXp}
       />
 
       <ShareableCardModal

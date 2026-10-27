@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 const INITIAL_MEMBERS = [
   {
@@ -76,19 +76,12 @@ function SquadMembersWidget({
   category = 'ADVENTURE',
   motto = '6 globetrotters tackling summits, deep sea dives, and street food across 4 continents.',
   joinCode = 'TRIP26',
-  cover = DEFAULT_COVER,
   onInvite,
   onLeave,
 }) {
   const [members, setMembers] = useState(INITIAL_MEMBERS);
   const [searchQuery, setSearchQuery] = useState('');
-  const [coverUrl, setCoverUrl] = useState(cover || DEFAULT_COVER);
-
-  useEffect(() => {
-    if (cover) {
-      setCoverUrl(cover);
-    }
-  }, [cover]);
+  const [coverUrl, setCoverUrl] = useState(DEFAULT_COVER);
   const [squadMotto, setSquadMotto] = useState(motto);
   const [isEditingMotto, setIsEditingMotto] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
