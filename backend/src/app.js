@@ -19,14 +19,18 @@ app.use(cors({
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'LifeQuest Wall of Fame API',
-    timestamp: new Date().toISOString(),
-  });
+// Health Check — returns running commit SHA
+const COMMIT_SHA = process.env.RENDER_GIT_COMMIT || process.env.COMMIT_SHA || 'dev';
+
+const healthResponse = () => ({
+  status: 'ok',
+  service: 'LifeQuest Wall of Fame API',
+  commit: COMMIT_SHA,
+  timestamp: new Date().toISOString(),
 });
+
+app.get('/health', (req, res) => res.json(healthResponse()));
+app.get('/api/health', (req, res) => res.json(healthResponse()));
 
 // Mount Routes
 app.use('/api/posts', postRoutes);

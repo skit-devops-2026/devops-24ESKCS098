@@ -25,7 +25,7 @@ make run
 
 ## Live URL
 
-<Add once M5 is done. Until then, leave as is.>
+https://lifequest-tb7g.onrender.com
 
 ## Health endpoint
 
