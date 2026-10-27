@@ -56,11 +56,12 @@ const BucketListHeader = ({ totalGoals, activeTab, onTabChange, teamGoalCount })
       <div className="flex gap-3 font-space font-bold text-sm uppercase">
         <button
           type="button"
+          id="tab-my-goals-btn"
           onClick={() => onTabChange('personal')}
-          className={`px-6 py-3 border-3 border-black rounded-xl transition-all duration-200 ${
+          className={`px-6 py-3 border-3 border-black rounded-xl transition-all duration-200 cursor-pointer select-none active:translate-y-0.5 ${
             activeTab === 'personal'
-              ? 'bg-[#ffed00] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-              : 'bg-white text-black hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]'
+              ? 'bg-[#ffed00] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:bg-[#fff233]'
+              : 'bg-white text-black hover:-translate-y-0.5 hover:bg-neutral-50 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]'
           }`}
           aria-pressed={activeTab === 'personal'}
         >
@@ -73,11 +74,12 @@ const BucketListHeader = ({ totalGoals, activeTab, onTabChange, teamGoalCount })
         </button>
         <button
           type="button"
+          id="tab-team-goals-btn"
           onClick={() => onTabChange('team')}
-          className={`px-6 py-3 border-3 border-black rounded-xl transition-all duration-200 ${
+          className={`px-6 py-3 border-3 border-black rounded-xl transition-all duration-200 cursor-pointer select-none active:translate-y-0.5 ${
             activeTab === 'team'
-              ? 'bg-[#bdf2ff] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-              : 'bg-white text-black hover:-translate-y-0.5 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]'
+              ? 'bg-[#bdf2ff] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:bg-[#cdf6ff]'
+              : 'bg-white text-black hover:-translate-y-0.5 hover:bg-neutral-50 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]'
           }`}
           aria-pressed={activeTab === 'team'}
         >

@@ -1,26 +1,45 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-const DEFAULT_LOG_TRAIL = [
+const DEFAULT_PERSONAL_LOG_TRAIL = [
   {
     id: 1,
-    author: 'Alex T.',
+    author: 'You (Alex)',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80',
-    action: 'Logged altitude training run (8.5 km)',
+    action: 'Logged personal milestone and training checkpoint',
+    progress: 60,
+    timestamp: 'Yesterday',
+  },
+  {
+    id: 2,
+    author: 'You (Alex)',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80',
+    action: 'Status changed to In Progress',
+    progress: 25,
+    timestamp: '3 days ago',
+  },
+];
+
+const DEFAULT_TEAM_LOG_TRAIL = [
+  {
+    id: 1,
+    author: 'Alex Rivero',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80',
+    action: 'Logged squad checkpoint progress',
     progress: 75,
     timestamp: '2 hours ago',
   },
   {
     id: 2,
-    author: 'Marco Polo',
-    avatar: 'https://ui-avatars.com/api/?name=Marco+Polo&background=ffed00&color=000&bold=true',
-    action: 'Completed gear prep & cold-weather checklist',
+    author: 'Squad Member',
+    avatar: 'https://ui-avatars.com/api/?name=Squad+Member&background=ffed00&color=000&bold=true',
+    action: 'Completed gear prep & team checklist',
     progress: 50,
     timestamp: 'Yesterday',
   },
   {
     id: 3,
-    author: 'Alex T.',
+    author: 'Alex Rivero',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80',
     action: 'Status changed from Not Started to In Progress',
     progress: 25,
@@ -35,18 +54,21 @@ function ProgressUpdateDrawer({
   onSaveProgress,
   onOpenCelebration,
 }) {
+  const isTeamGoal = Boolean(goal?.groupId) || Boolean(goal?.isTeamGoal) || Boolean(goal?.members?.length);
+
   const [progress, setProgress] = useState(goal?.progress || 0);
   const [status, setStatus] = useState(goal?.status || 'in-progress');
   const [note, setNote] = useState('');
-  const [logTrail, setLogTrail] = useState(DEFAULT_LOG_TRAIL);
+  const [logTrail, setLogTrail] = useState(isTeamGoal ? DEFAULT_TEAM_LOG_TRAIL : DEFAULT_PERSONAL_LOG_TRAIL);
 
   useEffect(() => {
     if (goal) {
       setProgress(goal.progress ?? 40);
       setStatus(goal.status || 'in-progress');
       setNote('');
+      setLogTrail(isTeamGoal ? DEFAULT_TEAM_LOG_TRAIL : DEFAULT_PERSONAL_LOG_TRAIL);
     }
-  }, [goal, isOpen]);
+  }, [goal, isOpen, isTeamGoal]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -91,7 +113,7 @@ function ProgressUpdateDrawer({
     }
 
     if (onSaveProgress) {
-      onSaveProgress(updatedGoal);
+      onSaveProgress(updatedGoal, note);
     }
 
     onClose();
@@ -115,10 +137,10 @@ function ProgressUpdateDrawer({
         <div className="bg-brand-yellow p-4 sm:p-5 border-b-3 border-black flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <span className="sticker-badge bg-black text-brand-yellow px-2 py-0.5 rounded text-xs -rotate-1">
-              LOG CHECKPOINT ⚡
+              {isTeamGoal ? 'SQUAD LOG ⚡' : 'LOG CHECKPOINT ⚡'}
             </span>
             <span className="font-mono text-xs font-black uppercase text-neutral-800">
-              UPDATE GAUGE
+              {isTeamGoal ? 'TEAM GAUGE' : 'PERSONAL GAUGE'}
             </span>
           </div>
 
@@ -257,7 +279,11 @@ function ProgressUpdateDrawer({
                 rows="3"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="What milestone did you or your squad hit today? e.g. Booked flight tickets, hiked 1500m checkpoint..."
+                placeholder={
+                  isTeamGoal
+                    ? "What milestone did you or your squad hit today? e.g. Booked flight tickets, hiked 1500m checkpoint..."
+                    : "What personal milestone did you reach today? e.g. Finished chapter 3, completed 5k run..."
+                }
                 className="w-full p-3 bg-white brutal-border-sm rounded-lg font-hanken text-xs focus:outline-none focus:ring-2 focus:ring-brand-pink shadow-brutal-sm resize-none"
               />
             </div>
@@ -268,7 +294,7 @@ function ProgressUpdateDrawer({
               type="submit"
               className="w-full py-3 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Update Squad Log ➔</span>
+              <span>{isTeamGoal ? 'Update Squad Log ➔' : 'Update Personal Progress ➔'}</span>
             </button>
           </form>
 
@@ -276,7 +302,7 @@ function ProgressUpdateDrawer({
           <div className="space-y-3 pt-4 border-t-2 border-black">
             <div className="flex items-center justify-between">
               <h4 className="font-mono text-xs font-black uppercase tracking-wider text-neutral-700">
-                STATUS CHANGE TRAIL
+                {isTeamGoal ? 'SQUAD STATUS & CHECKPOINT TRAIL' : 'PERSONAL CHECKPOINT TRAIL'}
               </h4>
               <span className="font-mono text-[10px] text-neutral-500 font-bold">
                 {logTrail.length} UPDATES

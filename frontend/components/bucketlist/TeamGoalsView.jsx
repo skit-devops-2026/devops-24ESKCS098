@@ -14,6 +14,8 @@ import { DEMO_USER_ID, DEMO_USER_NAME, STATUS_FILTERS } from './constants';
  * or the new API-driven props from BucketList.jsx.
  *
  * NEW API props (used when parent is BucketList.jsx):
+ *   squadId             – the active squad's ID (required for API mode; gates goal creation)
+ *   squadName           – human-readable squad name for context display
  *   teamGoals           – array of team goal objects from the API
  *   teamGoalsLoading    – boolean
  *   teamGoalsError      – string | null
@@ -28,6 +30,10 @@ import { DEMO_USER_ID, DEMO_USER_NAME, STATUS_FILTERS } from './constants';
  *   teamRequests / setTeamRequests – local request management (not yet API-backed)
  */
 function TeamGoalsView({
+  // Squad context (new required for API mode)
+  squadId,
+  squadName,
+
   // New API-driven interface
   teamGoals: teamGoalsProp,
   teamGoalsLoading = false,
@@ -37,6 +43,8 @@ function TeamGoalsView({
   onUpdateGoal,
   onDeleteGoal,
   onQuickStatus,
+  onOpenDrawer,
+  onCelebrate,
 
   // Legacy local-state interface (still supported if caller passes setTeamGoals)
   setTeamGoals,
@@ -203,6 +211,18 @@ function TeamGoalsView({
         />
       )}
 
+      {/* Squad context badge (API mode) */}
+      {isApiMode && squadName && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="inline-flex items-center gap-1.5 bg-black text-brand-yellow font-space font-bold text-xs px-3 py-1 rounded-full border-2 border-black">
+            👥 {squadName}
+          </span>
+          <span className="font-hanken text-xs text-gray-500">
+            Team goals shared with all squad members
+          </span>
+        </div>
+      )}
+
       {/* Status filters */}
       <GoalFilters
         filters={STATUS_FILTERS}
@@ -299,6 +319,14 @@ function TeamGoalsView({
           onClose={() => setSelectedGoal(null)}
           onUpdate={handleUpdateGoal}
           onDelete={handleDeleteGoal}
+          onOpenDrawer={(g) => {
+            setSelectedGoal(null);
+            if (onOpenDrawer) onOpenDrawer(g);
+          }}
+          onCelebrate={(g) => {
+            setSelectedGoal(null);
+            if (onCelebrate) onCelebrate(g);
+          }}
         />
       )}
     </>
