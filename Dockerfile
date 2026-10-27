@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json package-lock.json vite.config.js index.html ./
 COPY frontend/ ./frontend/
 
-RUN npm ci
+RUN npm install
 RUN npm run build
 
 
@@ -18,7 +18,7 @@ WORKDIR /app
 
 # Copy backend source and install its dependencies
 COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 COPY backend/ ./
 
