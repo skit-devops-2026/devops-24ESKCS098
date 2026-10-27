@@ -46,18 +46,18 @@ function ShareableCardModal({ isOpen, onClose, item }) {
             </div>
 
             {/* Proof Photo */}
-            <div className="h-56 border-3 border-black rounded-xl overflow-hidden shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] relative bg-black">
+            <div className="w-full max-h-72 border-3 border-black rounded-xl overflow-hidden shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] relative bg-neutral-900">
               <img
                 alt="Proof"
                 src={item.image}
-                className="w-full h-full object-cover"
+                className="w-full h-auto max-h-72 object-cover block"
                 onError={(e) => {
                   e.currentTarget.onerror = null;
                   e.currentTarget.src =
                     'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces';
                 }}
               />
-              <div className="absolute top-2 left-2 px-2.5 py-1 bg-white border-2 border-black rounded-md font-space font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="absolute top-2 left-2 z-20 px-2.5 py-1 bg-white border-2 border-black rounded-md font-space font-black text-[10px] uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 {item.badge}
               </div>
             </div>
