@@ -83,7 +83,4 @@ Desktop.ini
 *.swo
 
 # 10. Local docs & notes
-docs/
-
-myArchive.txt
-wof.txt
+# docs/ — NOT ignored: M6 requires deployment screenshots here
