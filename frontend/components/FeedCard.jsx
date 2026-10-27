@@ -11,6 +11,30 @@ const REACTION_OPTIONS = [
   { emoji: '⚡', label: 'Epic', bg: 'hover:bg-cyan-100', type: 'epic' },
 ];
 
+const REACTION_TYPE_TO_EMOJI = {
+  fire: '🔥',
+  like: '❤️',
+  clap: '👏',
+  party: '🎉',
+  epic: '⚡',
+  star: '⭐',
+  muscle: '💪',
+};
+
+const EMOJI_TO_REACTION_TYPE = {
+  '🔥': 'fire',
+  '❤️': 'like',
+  '👏': 'clap',
+  '🎉': 'party',
+  '⚡': 'epic',
+  '⭐': 'star',
+  '💪': 'muscle',
+  '🙌': 'party',
+};
+
+const getReactionEmoji = (val) => (val ? REACTION_TYPE_TO_EMOJI[val] || val : '');
+const getReactionType = (val) => (val ? EMOJI_TO_REACTION_TYPE[val] || val : '');
+
 function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   const [likes, setLikes] = useState(item.likes || 0);
   const [hasLiked, setHasLiked] = useState(item.hasLiked || false);
@@ -112,19 +136,44 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   };
 
   // Add / Change Reaction
-  const handleSelectReaction = async (emoji, type = 'fire') => {
-    const isDeselect = userReaction === emoji;
+  const handleSelectReaction = async (emoji, type) => {
+    const selectedType = type || getReactionType(emoji) || 'fire';
+    const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
+    const currentUserType = getReactionType(userReaction);
+    const currentUserEmoji = getReactionEmoji(userReaction);
+    const isDeselect =
+      userReaction === selectedType ||
+      userReaction === selectedEmoji ||
+      currentUserType === selectedType;
+
     setReactionCounts((prev) => {
       const next = { ...prev };
+      const targetKey =
+        next[selectedType] !== undefined
+          ? selectedType
+          : next[selectedEmoji] !== undefined
+          ? selectedEmoji
+          : selectedType;
+
       if (isDeselect) {
-        next[emoji] = Math.max(0, (next[emoji] || 1) - 1);
+        next[targetKey] = Math.max(0, (next[targetKey] || 1) - 1);
         setUserReaction(null);
       } else {
-        if (userReaction && next[userReaction]) {
-          next[userReaction] = Math.max(0, next[userReaction] - 1);
+        if (userReaction) {
+          const oldType = getReactionType(userReaction);
+          const oldEmoji = getReactionEmoji(userReaction);
+          const oldKey =
+            next[oldType] !== undefined
+              ? oldType
+              : next[oldEmoji] !== undefined
+              ? oldEmoji
+              : oldType;
+          if (next[oldKey] !== undefined) {
+            next[oldKey] = Math.max(0, next[oldKey] - 1);
+          }
         }
-        next[emoji] = (next[emoji] || 0) + 1;
-        setUserReaction(emoji);
+        next[targetKey] = (next[targetKey] || 0) + 1;
+        setUserReaction(selectedType);
       }
       return next;
     });
@@ -134,7 +183,7 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
       if (isDeselect) {
         await api.deleteReaction(item.id);
       } else {
-        await api.upsertReaction(item.id, type);
+        await api.upsertReaction(item.id, selectedType);
       }
     } catch (e) {
       console.warn('Could not sync reaction with backend:', e.message);
@@ -149,6 +198,8 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
     const tempComment = {
       id: Date.now(),
+      authorId: 1,
+      isOwner: true,
       name: 'You (Alex)',
       color: 'text-primary font-black',
       text,
@@ -185,7 +236,11 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   };
 
 
-  const activeReactions = Object.entries(reactionCounts).filter(([_, count]) => count > 0);
+  const activeReactions = Object.entries(reactionCounts).filter(
+    ([key, count]) => count > 0 && key !== 'like' && key !== '❤️'
+  );
+  const userReactionEmoji = getReactionEmoji(userReaction);
+  const userReactionType = getReactionType(userReaction);
 
   return (
     <article
@@ -313,11 +368,11 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
             <button
               type="button"
               onClick={() => setShowReactionPicker(!showReactionPicker)}
-              className="inline-flex items-center gap-1 px-3 py-2 border-2 border-black bg-white rounded font-space font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 border-2 border-black bg-white rounded font-space font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer"
               title="Add Reaction"
             >
-              <span>{userReaction || '😀'}</span>
-              <span className="text-xs">+</span>
+              <span>{userReactionEmoji || '😀'}</span>
+              <span className="text-xs font-black">+</span>
             </button>
 
             {/* Floating Reaction Dock */}
@@ -329,7 +384,7 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
                     type="button"
                     onClick={() => handleSelectReaction(opt.emoji, opt.type)}
                     className={`w-9 h-9 flex items-center justify-center text-lg border-2 border-black rounded-lg ${opt.bg} hover:scale-125 transition-transform cursor-pointer ${
-                      userReaction === opt.emoji ? 'bg-brand-yellow font-black' : 'bg-white'
+                      userReactionType === opt.type || userReactionEmoji === opt.emoji ? 'bg-brand-yellow font-black' : 'bg-white'
                     }`}
                     title={opt.label}
                   >
@@ -399,19 +454,28 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
       {/* Active Reaction Pills (Sec 5 Social) */}
       {activeReactions.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-1">
-          {activeReactions.map(([emoji, count]) => (
-            <button
-              key={emoji}
-              type="button"
-              onClick={() => handleSelectReaction(emoji)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-space font-bold border-2 border-black rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:scale-105 cursor-pointer ${
-                userReaction === emoji ? 'bg-brand-yellow' : 'bg-gray-50'
-              }`}
-            >
-              <span>{emoji}</span>
-              <span>{count}</span>
-            </button>
-          ))}
+          {activeReactions.map(([reactionKey, count]) => {
+            const emoji = getReactionEmoji(reactionKey);
+            const type = getReactionType(reactionKey);
+            const isSelected =
+              userReactionType === type ||
+              userReactionEmoji === emoji ||
+              userReaction === reactionKey;
+
+            return (
+              <button
+                key={reactionKey}
+                type="button"
+                onClick={() => handleSelectReaction(emoji, type)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-space font-bold border-2 border-black rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:scale-105 cursor-pointer ${
+                  isSelected ? 'bg-brand-yellow' : 'bg-gray-50'
+                }`}
+              >
+                <span>{emoji}</span>
+                <span>{count}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -419,35 +483,45 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
       {showComments && (
         <div className="flex flex-col gap-3 pt-4 border-t-3 border-black text-sm">
           <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-            {comments.map((c) => (
-              <div
-                key={c.id || c.text}
-                className="group/comm p-2.5 bg-gray-50 hover:bg-amber-50/50 border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs flex justify-between items-center gap-2 transition-all"
-              >
-                <div className="flex-1 min-w-0 pr-1">
-                  <span className={`font-bricolage font-black uppercase ${c.color || 'text-black'}`}>
-                    {c.name}:
-                  </span>{' '}
-                  <span className="font-hanken font-medium text-black break-words">{c.text}</span>
+            {comments.map((c) => {
+              const isMyComment =
+                c.isOwner === true ||
+                c.authorId === 1 ||
+                c.author_id === 1 ||
+                (c.name && (c.name.includes('Alex') || c.name.includes('You')));
+
+              return (
+                <div
+                  key={c.id || c.text}
+                  className="group/comm p-2.5 bg-gray-50 hover:bg-amber-50/50 border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs flex justify-between items-center gap-2 transition-all"
+                >
+                  <div className="flex-1 min-w-0 pr-1">
+                    <span className={`font-bricolage font-black uppercase ${c.color || 'text-black'}`}>
+                      {c.name}:
+                    </span>{' '}
+                    <span className="font-hanken font-medium text-black break-words">{c.text}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {c.time && (
+                      <span className="text-[10px] font-space text-black/50">{c.time}</span>
+                    )}
+                    {/* Delete Comment Button - ONLY visible on comments authored by the current user */}
+                    {isMyComment && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteComment(c.id)}
+                        className="opacity-70 group-hover/comm:opacity-100 p-1 hover:bg-[#ffdad6] text-black/60 hover:text-[#ba1a1a] border border-transparent hover:border-black rounded transition-all cursor-pointer"
+                        title="Delete Your Comment"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {c.time && (
-                    <span className="text-[10px] font-space text-black/50">{c.time}</span>
-                  )}
-                  {/* Delete Comment Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteComment(c.id)}
-                    className="opacity-60 group-hover/comm:opacity-100 p-1 hover:bg-[#ffdad6] text-black/60 hover:text-[#ba1a1a] border border-transparent hover:border-black rounded transition-all cursor-pointer"
-                    title="Delete Comment"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Neo-Brutalist Unified Comment Input Capsule */}

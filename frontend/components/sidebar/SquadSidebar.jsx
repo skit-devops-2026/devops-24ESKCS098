@@ -39,18 +39,32 @@ const CATEGORIES = [
   { id: 'CAREER', label: 'Career', emoji: '💼', count: 2, color: 'bg-brand-purple text-black', rotate: '-rotate-1' },
 ];
 
+const SQUAD_BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
+
+const getSquadDisplayIcon = (squad) => {
+  if (squad?.icon) return squad.icon;
+  if (!squad?.name) return '👥';
+  const match = squad.name.match(/(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
+  if (match) return match[0];
+  return squad.name.trim().charAt(0).toUpperCase();
+};
+
 function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectSquad, selectedCategory = null, onSelectCategory, onAddGroupClick }) {
-  const [currentSquad, setCurrentSquad] = useState(activeSquadId);
-  const [activeCategory, setActiveCategory] = useState(selectedCategory);
+  const [localSquad, setLocalSquad] = useState(activeSquadId);
+  const [localCategory, setLocalCategory] = useState(selectedCategory);
+  const [failedAvatars, setFailedAvatars] = useState({});
+
+  const currentSquad = activeSquadId !== undefined ? activeSquadId : localSquad;
+  const activeCategory = selectedCategory !== undefined ? selectedCategory : localCategory;
 
   const handleSquadClick = (id) => {
-    setCurrentSquad(id);
+    setLocalSquad(id);
     if (onSelectSquad) onSelectSquad(id);
   };
 
   const handleCategoryClick = (id) => {
     const next = activeCategory === id ? null : id;
-    setActiveCategory(next);
+    setLocalCategory(next);
     if (onSelectCategory) onSelectCategory(next);
   };
 
@@ -65,7 +79,7 @@ function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectS
         <button
           type="button"
           onClick={onAddGroupClick}
-          className="px-2 py-1 bg-brand-yellow font-mono text-xs font-black uppercase rounded brutal-border-sm shadow-brutal-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+          className="px-2 py-1 bg-brand-yellow font-mono text-xs font-black uppercase rounded brutal-border-sm shadow-brutal-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all cursor-pointer"
         >
           + ADD GROUP
         </button>
@@ -75,6 +89,9 @@ function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectS
       <div className="space-y-2.5">
         {squads.map((squad) => {
           const isActive = currentSquad === squad.id;
+          const fallbackBg = SQUAD_BG_COLORS[Math.abs((squad.id || squad.name || '').length) % SQUAD_BG_COLORS.length];
+          const hasImage = squad.avatar && !failedAvatars[squad.id];
+
           return (
             <div
               key={squad.id}
@@ -86,11 +103,18 @@ function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectS
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full brutal-border-sm ${squad.bgColor} flex items-center justify-center text-black font-black text-sm overflow-hidden shrink-0`}>
-                  {squad.avatar ? (
-                    <img alt={squad.name} className="w-full h-full object-cover" src={squad.avatar} />
+                <div className={`w-10 h-10 rounded-full brutal-border-sm ${squad.bgColor || fallbackBg} flex items-center justify-center text-black font-black text-sm overflow-hidden shrink-0`}>
+                  {hasImage ? (
+                    <img
+                      alt={squad.name}
+                      className="w-full h-full object-cover"
+                      src={squad.avatar}
+                      onError={() => setFailedAvatars((prev) => ({ ...prev, [squad.id]: true }))}
+                    />
                   ) : (
-                    <span>{squad.icon}</span>
+                    <span className="text-base select-none leading-none">
+                      {getSquadDisplayIcon(squad)}
+                    </span>
                   )}
                 </div>
                 <div>
