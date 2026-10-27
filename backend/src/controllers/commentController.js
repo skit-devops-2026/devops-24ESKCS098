@@ -21,6 +21,8 @@ async function getComments(req, res, next) {
 
       const comments = rows.map((c) => ({
         id: c.id,
+        authorId: c.author_id,
+        isOwner: c.author_id === userId,
         name: c.author_name,
         avatar: c.author_avatar,
         text: c.text,
@@ -38,6 +40,8 @@ async function getComments(req, res, next) {
       success: true,
       comments: paginated.map((c) => ({
         id: c.id,
+        authorId: c.author_id,
+        isOwner: c.author_id === userId,
         name: c.author_name,
         color: c.color || 'text-black',
         text: c.text,
@@ -77,6 +81,8 @@ async function addComment(req, res, next) {
 
       const newComment = {
         id: rows[0].id,
+        authorId: userId,
+        isOwner: true,
         name: author.name,
         text: rows[0].text,
         time: 'Just now',
@@ -110,6 +116,8 @@ async function addComment(req, res, next) {
       success: true,
       comment: {
         id: newComment.id,
+        authorId: userId,
+        isOwner: true,
         name: newComment.author_name,
         color: newComment.color,
         text: newComment.text,
@@ -128,18 +136,28 @@ async function deleteComment(req, res, next) {
     const userId = req.user.id;
 
     if (isPgConnected()) {
-      const { rowCount } = await pool.query(
-        `DELETE FROM comments
-         WHERE id = $1
-           AND (author_id = $2 OR post_id IN (SELECT id FROM posts WHERE author_id = $2))`,
-        [commentId, userId]
-      );
-      if (rowCount === 0) return res.status(404).json({ success: false, message: 'Comment not found or unauthorized' });
+      // Check if comment exists first to give appropriate error message
+      const checkRes = await pool.query(`SELECT author_id FROM comments WHERE id = $1`, [commentId]);
+      if (checkRes.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Comment not found' });
+      }
+      if (checkRes.rows[0].author_id !== userId) {
+        return res.status(403).json({ success: false, message: 'Unauthorized: You can only delete your own comments' });
+      }
+
+      await pool.query(`DELETE FROM comments WHERE id = $1 AND author_id = $2`, [commentId, userId]);
       return res.json({ success: true, message: 'Comment deleted' });
     }
 
-    const idx = inMemoryStore.comments.findIndex((c) => c.id === commentId);
-    if (idx === -1) return res.status(404).json({ success: false, message: 'Comment not found' });
+    const comment = inMemoryStore.comments.find((c) => c.id === commentId);
+    if (!comment) return res.status(404).json({ success: false, message: 'Comment not found' });
+    
+    // Strict ownership validation: only author can delete their comment
+    if (comment.author_id !== userId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized: You can only delete your own comments' });
+    }
+
+    const idx = inMemoryStore.comments.indexOf(comment);
     inMemoryStore.comments.splice(idx, 1);
     res.json({ success: true, message: 'Comment deleted' });
   } catch (err) {

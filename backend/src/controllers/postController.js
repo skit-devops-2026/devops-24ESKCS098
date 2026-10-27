@@ -56,7 +56,7 @@ async function getFeed(req, res, next) {
         });
 
         const commentsRes = await pool.query(
-          `SELECT c.id, c.post_id, c.text, c.created_at, u.name AS author_name
+          `SELECT c.id, c.post_id, c.author_id, c.text, c.created_at, u.name AS author_name
            FROM (
              SELECT *, ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY created_at DESC) AS rn
              FROM comments WHERE post_id = ANY($1::int[])
@@ -69,6 +69,8 @@ async function getFeed(req, res, next) {
           if (!commentsByPost[c.post_id]) commentsByPost[c.post_id] = [];
           commentsByPost[c.post_id].push({
             id: c.id,
+            authorId: c.author_id,
+            isOwner: c.author_id === userId,
             name: c.author_name,
             text: c.text,
             time: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -121,7 +123,7 @@ async function getFeed(req, res, next) {
 
     const formattedPosts = paginated.map((p) => {
       const author = inMemoryStore.users.find((u) => u.id === p.author_id) || { name: 'Quester', avatar_url: '' };
-      const squad = inMemoryStore.groups.find((g) => g.id === p.group_id) || { name: 'Trip Squad' };
+      const squad = inMemoryStore.groups.find((g) => g.id === p.group_id);
       const postComments = inMemoryStore.comments.filter((c) => c.post_id === p.id);
       const postReactions = inMemoryStore.reactions.filter((r) => r.post_id === p.id);
 
@@ -144,7 +146,7 @@ async function getFeed(req, res, next) {
         image: (p.proof_images && p.proof_images[0]) || (p.proofImages && p.proofImages[0]) || p.image || null,
         likes: reactionCounts['like'] || 0,
         comments: postComments.length,
-        squadName: squad.name,
+        squadName: squad ? squad.name : (p.type === 'solo' || !p.group_id ? 'Solo Quest 👤' : null),
         xpEarned: p.xp_earned,
         statBadge: p.stat_badge,
         completionDate: new Date(p.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -152,6 +154,8 @@ async function getFeed(req, res, next) {
         userReaction: myReactionObj ? myReactionObj.type : null,
         commentList: postComments.map((c) => ({
           id: c.id,
+          authorId: c.author_id,
+          isOwner: c.author_id === userId,
           name: c.author_name,
           color: c.color || 'text-black',
           text: c.text,
@@ -240,9 +244,9 @@ async function createPost(req, res, next) {
     const newId = inMemoryStore._nextPostId++;
     const newPost = {
       id: newId,
-      type: 'solo',
+      type: req.body.type || (groupId ? 'group' : 'solo'),
       author_id: userId,
-      group_id: groupId,
+      group_id: req.body.groupId !== undefined ? req.body.groupId : (req.body.type === 'solo' ? null : 1),
       title: title.trim(),
       category: req.body.category || 'ADVENTURE',
       caption: caption ? caption.trim() : `Conquered "${title}"!`,
