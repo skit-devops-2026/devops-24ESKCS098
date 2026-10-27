@@ -1,20 +1,30 @@
 /**
- * Bucketlist Controller (MongoDB Mongoose + In-Memory Fallback)
+ * BucketList Controller
  *
- * Implements:
- *   - Overall bucketlist statistics
- *   - Personal goals CRUD
- *   - Goal status & progress transitions
- *   - Squads (groups) CRUD & membership (join/leave)
- *   - Squad/team goals CRUD
+ * Handles personal goals (items with group_id = NULL owned by req.user.id)
+ * and team goals (items tied to a group the user belongs to).
+ *
+ * Status mapping:
+ *   Frontend value   ↔  DB value
+ *   'not-started'    ↔  'not_started'
+ *   'in-progress'    ↔  'in_progress'
+ *   'completed'      ↔  'completed'
+ *
+ * Visibility mapping:
+ *   Frontend value   ↔  DB value
+ *   'public'         ↔  'shared'
+ *   'private'        ↔  'personal'
+ *
+ * Auth: uses req.user set by authMiddleware (JWT or dev fallback).
+ * In dev mode the fallback user id is 1 (Alex Rivero) unless x-dev-user-id
+ * header is sent. Do NOT trust any user id from the request body.
  */
 
 'use strict';
 
-const { Item, Group, User, Post } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+const { pool, isPgConnected, inMemoryStore } = require('../config/db');
 
-// ── Value Maps ────────────────────────────────────────────────────────────────
+// ── value maps ────────────────────────────────────────────────────────────────
 
 const STATUS_TO_DB = {
   'not-started': 'not_started',
@@ -41,32 +51,29 @@ const VIS_TO_FRONTEND = {
 };
 
 const ALLOWED_STATUSES_DB = new Set(['not_started', 'in_progress', 'completed']);
+const ALLOWED_CATEGORIES = new Set(['ADVENTURE', 'SKILLS', 'TRAVEL', 'FITNESS', 'CAREER']);
 const ALLOWED_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 const ALLOWED_PRIORITIES = new Set(['HIGH', 'MEDIUM', 'LOW']);
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function mapItemToFrontend(row) {
-  if (!row) return null;
-  const deadlineStr = row.deadline
-    ? (row.deadline instanceof Date ? row.deadline.toISOString().split('T')[0] : String(row.deadline).split('T')[0])
-    : '';
-
   return {
     id: row.id,
     title: row.title,
     description: row.description || '',
-    category: (row.category || 'ADVENTURE').toUpperCase(),
+    category: row.category || 'ADVENTURE',
     difficulty: row.difficulty || 'medium',
     visibility: VIS_TO_FRONTEND[row.visibility] || 'public',
     status: STATUS_TO_FRONTEND[row.status] || 'not-started',
     progress: row.progress ?? 0,
     priority: row.priority || 'HIGH',
-    deadline: deadlineStr,
-    createdAt: row.created_at || row.createdAt,
-    completedAt: row.completed_at || row.completedAt || null,
-    ownerId: row.owner_id || row.ownerId,
-    groupId: row.group_id || row.groupId || null,
+    deadline: row.deadline ? row.deadline.toISOString().split('T')[0] : '',
+    createdAt: row.created_at,
+    completedAt: row.completed_at || null,
+    ownerId: row.owner_id,
+    groupId: row.group_id || null,
+    // squad / team goal extras
     members: row.members || null,
   };
 }
@@ -79,7 +86,7 @@ function validateRequired(title, description) {
   return null;
 }
 
-// ── In-Memory Helpers (Fallback when MongoDB is disconnected) ─────────────────
+// ── in-memory helpers (used when PostgreSQL is unavailable) ───────────────────
 
 let _inMemItems = null;
 let _inMemIdCounter = 100;
@@ -96,47 +103,48 @@ let _inMemGroupMembers = [
 
 function getInMemItems() {
   if (!_inMemItems) {
+    // Pre-populate from the seed data already in inMemoryStore
     _inMemItems = [
       {
         id: 1,
         owner_id: 1,
         group_id: null,
-        title: 'Climb Mount Kilimanjaro',
-        description: 'Reach the summit of Uhuru Peak at 5,895 meters above sea level.',
+        title: 'Summit Mount Fuji at Sunrise',
+        description: 'An epic 2-day trek to catch the dawn from the highest peak in Japan.',
         category: 'ADVENTURE',
         difficulty: 'hard',
         visibility: 'shared',
         status: 'in_progress',
-        progress: 45,
+        progress: 40,
         priority: 'HIGH',
-        deadline: new Date('2026-11-30'),
-        created_at: new Date('2026-01-10T10:00:00.000Z'),
+        deadline: new Date('2027-07-01'),
+        created_at: new Date('2026-09-10T08:00:00.000Z'),
         completed_at: null,
       },
       {
         id: 2,
         owner_id: 1,
         group_id: null,
-        title: 'Learn Japanese to Conversational Fluency',
-        description: 'Complete JLPT N4 level curriculum and practice weekly with native speakers.',
+        title: 'Master 5 Authentic Pasta Recipes',
+        description: 'Weekly cooking workshop to learn carbonara and more from scratch.',
         category: 'SKILLS',
         difficulty: 'medium',
-        visibility: 'personal',
+        visibility: 'shared',
         status: 'not_started',
         progress: 0,
         priority: 'MEDIUM',
-        deadline: new Date('2026-12-31'),
-        created_at: new Date('2026-03-01T12:00:00.000Z'),
+        deadline: null,
+        created_at: new Date('2026-10-01T10:30:00.000Z'),
         completed_at: null,
       },
       {
         id: 3,
         owner_id: 1,
         group_id: null,
-        title: 'Backpack Across Southeast Asia',
-        description: 'Spend six weeks traveling through Thailand, Vietnam, and Cambodia.',
+        title: 'Road Trip Through the Amalfi Coast',
+        description: '7 days, 3 friends, and an open-top vintage car. Done last summer.',
         category: 'TRAVEL',
-        difficulty: 'medium',
+        difficulty: 'easy',
         visibility: 'shared',
         status: 'completed',
         progress: 100,
@@ -192,13 +200,23 @@ function getInMemItems() {
 async function getBucketlistStats(req, res, next) {
   const userId = req.user.id;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const userItems = await Item.find({ owner_id: userId, group_id: null }).lean();
-      const total = userItems.length;
-      const completed = userItems.filter((i) => i.status === 'completed').length;
-      const inProgress = userItems.filter((i) => i.status === 'in_progress').length;
-      const notStarted = userItems.filter((i) => i.status === 'not_started').length;
+      const sql = `
+        SELECT
+          COUNT(*)::int AS total_goals,
+          COUNT(CASE WHEN status = 'completed' THEN 1 END)::int AS completed_goals,
+          COUNT(CASE WHEN status = 'in_progress' THEN 1 END)::int AS in_progress_goals,
+          COUNT(CASE WHEN status = 'not_started' THEN 1 END)::int AS not_started_goals
+        FROM items
+        WHERE owner_id = $1 AND group_id IS NULL
+      `;
+      const { rows } = await pool.query(sql, [userId]);
+      const s = rows[0] || {};
+      const total = s.total_goals || 0;
+      const completed = s.completed_goals || 0;
+      const inProgress = s.in_progress_goals || 0;
+      const notStarted = s.not_started_goals || 0;
       const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
       return res.json({
@@ -236,27 +254,39 @@ async function getBucketlistStats(req, res, next) {
   });
 }
 
-// ── Personal Goals CRUD ────────────────────────────────────────────────────────
+// ── Personal Goals ─────────────────────────────────────────────────────────────
 
 /**
  * GET /api/bucketlist/goals
  * Returns personal goals for the authenticated user.
+ * Supports ?status=in-progress&category=ADVENTURE
  */
 async function getPersonalGoals(req, res, next) {
   const userId = req.user.id;
   const { status, category } = req.query;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const query = { owner_id: userId, group_id: null };
+      const conditions = ['i.owner_id = $1', 'i.group_id IS NULL'];
+      const params = [userId];
+      let idx = 2;
+
       if (status && STATUS_TO_DB[status]) {
-        query.status = STATUS_TO_DB[status];
+        conditions.push(`i.status = $${idx++}`);
+        params.push(STATUS_TO_DB[status]);
       }
-      if (category) {
-        query.category = category.toUpperCase().trim();
+      if (category && ALLOWED_CATEGORIES.has(category.toUpperCase())) {
+        conditions.push(`i.category = $${idx++}`);
+        params.push(category.toUpperCase());
       }
 
-      const rows = await Item.find(query).sort({ created_at: -1 }).lean();
+      const sql = `
+        SELECT i.*
+        FROM items i
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY i.created_at DESC
+      `;
+      const { rows } = await pool.query(sql, params);
       return res.json({ success: true, goals: rows.map(mapItemToFrontend) });
     } catch (err) {
       return next(err);
@@ -264,12 +294,14 @@ async function getPersonalGoals(req, res, next) {
   }
 
   // In-memory fallback
-  let items = getInMemItems().filter((i) => i.owner_id === userId && i.group_id === null);
+  let items = getInMemItems().filter(
+    (i) => i.owner_id === userId && i.group_id === null
+  );
   if (status && STATUS_TO_DB[status]) {
     items = items.filter((i) => i.status === STATUS_TO_DB[status]);
   }
-  if (category) {
-    items = items.filter((i) => (i.category || '').toUpperCase() === category.toUpperCase());
+  if (category && ALLOWED_CATEGORIES.has(category.toUpperCase())) {
+    items = items.filter((i) => i.category === category.toUpperCase());
   }
   return res.json({ success: true, goals: items.map(mapItemToFrontend) });
 }
@@ -280,42 +312,42 @@ async function getPersonalGoals(req, res, next) {
  */
 async function createPersonalGoal(req, res, next) {
   const userId = req.user.id;
-  const { title, description, category, difficulty, visibility, deadline, priority } = req.body;
+  const { title, description, category, difficulty, visibility, deadline, priority } =
+    req.body;
 
   const err = validateRequired(title, description);
   if (err) return res.status(400).json({ success: false, message: err });
 
-  const dbCategory = (category || 'ADVENTURE').toUpperCase().trim();
+  const dbCategory = ALLOWED_CATEGORIES.has((category || '').toUpperCase())
+    ? category.toUpperCase()
+    : 'ADVENTURE';
   const dbDifficulty = ALLOWED_DIFFICULTIES.has(difficulty) ? difficulty : 'medium';
   const dbVisibility = VIS_TO_DB[visibility] || 'shared';
   const dbPriority = ALLOWED_PRIORITIES.has(priority) ? priority : 'HIGH';
-  const dbDeadline = deadline ? new Date(deadline) : null;
+  const dbDeadline = deadline || null;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const lastItem = await Item.findOne().sort({ id: -1 });
-      const newId = lastItem ? lastItem.id + 1 : 1;
-
-      const newItem = await Item.create({
-        id: newId,
-        owner_id: userId,
-        group_id: null,
-        title: title.trim(),
-        description: (description || '').trim(),
-        category: dbCategory,
-        difficulty: dbDifficulty,
-        visibility: dbVisibility,
-        status: 'not_started',
-        progress: 0,
-        priority: dbPriority,
-        deadline: dbDeadline,
-        created_at: new Date(),
-        completed_at: null,
-      });
-
-      return res.status(201).json({ success: true, goal: mapItemToFrontend(newItem) });
-    } catch (e) {
-      return next(e);
+      const sql = `
+        INSERT INTO items
+          (owner_id, group_id, title, description, category, difficulty,
+           visibility, status, progress, priority, deadline)
+        VALUES ($1, NULL, $2, $3, $4, $5, $6, 'not_started', 0, $7, $8)
+        RETURNING *
+      `;
+      const { rows } = await pool.query(sql, [
+        userId,
+        title.trim(),
+        (description || '').trim(),
+        dbCategory,
+        dbDifficulty,
+        dbVisibility,
+        dbPriority,
+        dbDeadline,
+      ]);
+      return res.status(201).json({ success: true, goal: mapItemToFrontend(rows[0]) });
+    } catch (err) {
+      return next(err);
     }
   }
 
@@ -352,13 +384,16 @@ async function getPersonalGoalById(req, res, next) {
     return res.status(400).json({ success: false, message: 'Invalid goal ID.' });
   }
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const item = await Item.findOne({ id: goalId, owner_id: userId, group_id: null }).lean();
-      if (!item) {
+      const { rows } = await pool.query(
+        'SELECT * FROM items WHERE id = $1 AND owner_id = $2',
+        [goalId, userId]
+      );
+      if (!rows[0]) {
         return res.status(404).json({ success: false, message: 'Goal not found.' });
       }
-      return res.json({ success: true, goal: mapItemToFrontend(item) });
+      return res.json({ success: true, goal: mapItemToFrontend(rows[0]) });
     } catch (err) {
       return next(err);
     }
@@ -380,39 +415,46 @@ async function updatePersonalGoal(req, res, next) {
     return res.status(400).json({ success: false, message: 'Invalid goal ID.' });
   }
 
-  const { title, description, category, difficulty, visibility, deadline, priority } = req.body;
+  const { title, description, category, difficulty, visibility, deadline, priority } =
+    req.body;
 
   const err = validateRequired(title, description);
   if (err) return res.status(400).json({ success: false, message: err });
 
-  const dbCategory = (category || 'ADVENTURE').toUpperCase().trim();
+  const dbCategory = ALLOWED_CATEGORIES.has((category || '').toUpperCase())
+    ? category.toUpperCase()
+    : 'ADVENTURE';
   const dbDifficulty = ALLOWED_DIFFICULTIES.has(difficulty) ? difficulty : 'medium';
   const dbVisibility = VIS_TO_DB[visibility] || 'shared';
   const dbPriority = ALLOWED_PRIORITIES.has(priority) ? priority : 'HIGH';
-  const dbDeadline = deadline ? new Date(deadline) : null;
+  const dbDeadline = deadline || null;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const updated = await Item.findOneAndUpdate(
-        { id: goalId, owner_id: userId, group_id: null },
-        {
-          title: title.trim(),
-          description: (description || '').trim(),
-          category: dbCategory,
-          difficulty: dbDifficulty,
-          visibility: dbVisibility,
-          priority: dbPriority,
-          deadline: dbDeadline,
-        },
-        { new: true }
-      );
-
-      if (!updated) {
+      const sql = `
+        UPDATE items
+        SET title=$3, description=$4, category=$5, difficulty=$6,
+            visibility=$7, priority=$8, deadline=$9
+        WHERE id=$1 AND owner_id=$2 AND group_id IS NULL
+        RETURNING *
+      `;
+      const { rows } = await pool.query(sql, [
+        goalId,
+        userId,
+        title.trim(),
+        (description || '').trim(),
+        dbCategory,
+        dbDifficulty,
+        dbVisibility,
+        dbPriority,
+        dbDeadline,
+      ]);
+      if (!rows[0]) {
         return res.status(404).json({ success: false, message: 'Goal not found.' });
       }
-      return res.json({ success: true, goal: mapItemToFrontend(updated) });
-    } catch (e) {
-      return next(e);
+      return res.json({ success: true, goal: mapItemToFrontend(rows[0]) });
+    } catch (err) {
+      return next(err);
     }
   }
 
@@ -458,42 +500,37 @@ async function updateGoalStatus(req, res, next) {
   if (dbProgress !== null) {
     dbProgress = Math.max(0, Math.min(100, Number(dbProgress) || 0));
   }
-  const completedAt = dbStatus === 'completed' ? new Date() : null;
 
-  if (isMongoConnected()) {
+  const now = dbStatus === 'completed' ? new Date() : null;
+
+  if (isPgConnected()) {
     try {
-      const updateData = {
-        status: dbStatus,
-        completed_at: completedAt,
-      };
-      if (dbProgress !== null) {
-        updateData.progress = dbProgress;
-      }
-
-      const updated = await Item.findOneAndUpdate(
-        { id: goalId, owner_id: userId, group_id: null },
-        updateData,
-        { new: true }
-      );
-
-      if (!updated) {
+      const sql = `
+        UPDATE items
+        SET status=$3,
+            progress=COALESCE($4, progress),
+            completed_at=COALESCE($5, completed_at)
+        WHERE id=$1 AND owner_id=$2
+        RETURNING *
+      `;
+      const { rows } = await pool.query(sql, [goalId, userId, dbStatus, dbProgress, now]);
+      if (!rows[0]) {
         return res.status(404).json({ success: false, message: 'Goal not found.' });
       }
-      return res.json({ success: true, goal: mapItemToFrontend(updated) });
-    } catch (e) {
-      return next(e);
+      return res.json({ success: true, goal: mapItemToFrontend(rows[0]) });
+    } catch (err) {
+      return next(err);
     }
   }
 
   const items = getInMemItems();
   const idx = items.findIndex((i) => i.id === goalId && i.owner_id === userId);
   if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
-
   items[idx] = {
     ...items[idx],
     status: dbStatus,
     progress: dbProgress !== null ? dbProgress : items[idx].progress,
-    completed_at: completedAt !== null ? completedAt : items[idx].completed_at,
+    completed_at: dbStatus === 'completed' ? new Date() : items[idx].completed_at,
   };
   return res.json({ success: true, goal: mapItemToFrontend(items[idx]) });
 }
@@ -509,10 +546,13 @@ async function deletePersonalGoal(req, res, next) {
     return res.status(400).json({ success: false, message: 'Invalid goal ID.' });
   }
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const deleted = await Item.findOneAndDelete({ id: goalId, owner_id: userId, group_id: null });
-      if (!deleted) {
+      const { rowCount } = await pool.query(
+        'DELETE FROM items WHERE id=$1 AND owner_id=$2 AND group_id IS NULL',
+        [goalId, userId]
+      );
+      if (rowCount === 0) {
         return res.status(404).json({ success: false, message: 'Goal not found.' });
       }
       return res.json({ success: true, message: 'Goal deleted.' });
@@ -528,7 +568,7 @@ async function deletePersonalGoal(req, res, next) {
   return res.json({ success: true, message: 'Goal deleted.' });
 }
 
-// ── Squads (Groups) CRUD & Membership ──────────────────────────────────────────
+// ── Team Goals ─────────────────────────────────────────────────────────────────
 
 /**
  * GET /api/bucketlist/squads
@@ -537,45 +577,28 @@ async function deletePersonalGoal(req, res, next) {
 async function getSquads(req, res, next) {
   const userId = req.user.id;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const groups = await Group.find({ 'members.user_id': userId }).lean();
-      const squadIds = groups.map((g) => g.id);
-
-      const activeQuestsRaw = await Item.aggregate([
-        {
-          $match: {
-            group_id: { $in: squadIds },
-            status: { $in: ['not_started', 'in_progress'] },
-          },
-        },
-        { $group: { _id: '$group_id', count: { $sum: 1 } } },
-      ]);
-
-      const activeQuestsMap = new Map(activeQuestsRaw.map((a) => [a._id, a.count]));
-
-      const squads = groups.map((g) => {
-        const mem = (g.members || []).find((m) => m.user_id === userId);
-        return {
-          id: g.id,
-          name: g.name,
-          description: g.description,
-          cover_url: g.cover_url,
-          join_code: g.join_code,
-          is_private: g.is_private,
-          user_role: mem ? mem.role : 'member',
-          members: (g.members || []).length,
-          active_quests: activeQuestsMap.get(g.id) || 0,
-        };
-      });
-
-      return res.json({ success: true, squads });
+      const sql = `
+        SELECT g.id, g.name, g.description, g.cover_url, g.join_code, g.is_private,
+               gm.role AS user_role,
+               COUNT(DISTINCT gm2.user_id)::int AS members,
+               COUNT(DISTINCT i.id)::int AS active_quests
+        FROM groups g
+        JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = $1
+        LEFT JOIN group_members gm2 ON gm2.group_id = g.id
+        LEFT JOIN items i ON i.group_id = g.id AND i.status IN ('not_started','in_progress')
+        GROUP BY g.id, g.name, g.description, g.cover_url, g.join_code, g.is_private, gm.role
+        ORDER BY g.name
+      `;
+      const { rows } = await pool.query(sql, [userId]);
+      return res.json({ success: true, squads: rows });
     } catch (err) {
       return next(err);
     }
   }
 
-  // In-memory fallback
+  // In-memory fallback: return user's squads
   const userGroupIds = new Set(
     _inMemGroupMembers.filter((gm) => gm.user_id === userId).map((gm) => gm.group_id)
   );
@@ -600,7 +623,7 @@ async function getSquads(req, res, next) {
  */
 async function createSquad(req, res, next) {
   const userId = req.user.id;
-  const { name, description, cover_url } = req.body;
+  const { name, description } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, message: 'Squad name is required.' });
@@ -609,40 +632,32 @@ async function createSquad(req, res, next) {
     return res.status(400).json({ success: false, message: 'Name must be 100 chars or fewer.' });
   }
 
+  // Generate a simple join code
   const joinCode = `LQ-${name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4)}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const lastGroup = await Group.findOne().sort({ id: -1 });
-      const newId = lastGroup ? lastGroup.id + 1 : 1;
-
-      const group = await Group.create({
-        id: newId,
-        name: name.trim(),
-        description: (description || '').trim(),
-        cover_url: cover_url ? cover_url.trim() : null,
-        join_code: joinCode,
-        admin_id: userId,
-        is_private: false,
-        members: [{ user_id: userId, role: 'admin', joined_at: new Date() }],
-        created_at: new Date(),
-      });
-
-      return res.status(201).json({
-        success: true,
-        squad: {
-          id: group.id,
-          name: group.name,
-          description: group.description,
-          cover_url: group.cover_url,
-          join_code: group.join_code,
-          admin_id: group.admin_id,
-          is_private: group.is_private,
-          user_role: 'admin',
-          members: 1,
-          active_quests: 0,
-        },
-      });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows } = await client.query(
+          `INSERT INTO groups (name, description, join_code, admin_id, is_private)
+           VALUES ($1, $2, $3, $4, false) RETURNING *`,
+          [name.trim(), (description || '').trim(), joinCode, userId]
+        );
+        const group = rows[0];
+        await client.query(
+          `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')`,
+          [group.id, userId]
+        );
+        await client.query('COMMIT');
+        return res.status(201).json({ success: true, squad: { ...group, user_role: 'admin', members: 1, active_quests: 0 } });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (err) {
       return next(err);
     }
@@ -654,7 +669,6 @@ async function createSquad(req, res, next) {
     id: newId,
     name: name.trim(),
     description: (description || '').trim(),
-    cover_url: cover_url ? cover_url.trim() : null,
     join_code: joinCode,
     is_private: false,
     admin_id: userId,
@@ -682,41 +696,39 @@ async function joinSquad(req, res, next) {
 
   const normalizedCode = rawCode.toUpperCase();
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const group = await Group.findOne({ join_code: normalizedCode });
-      if (!group) {
+      const { rows: groupRows } = await pool.query(
+        'SELECT * FROM groups WHERE UPPER(join_code) = $1',
+        [normalizedCode]
+      );
+      if (!groupRows.length) {
         return res.status(404).json({ success: false, message: 'Invalid squad join code.' });
       }
+      const group = groupRows[0];
 
-      const existingMember = (group.members || []).find((m) => m.user_id === userId);
-      if (existingMember) {
+      // Check if already a member
+      const { rows: memRows } = await pool.query(
+        'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [group.id, userId]
+      );
+      if (memRows.length) {
         return res.json({
           success: true,
           message: 'Already a member of this squad.',
-          squad: {
-            id: group.id,
-            name: group.name,
-            description: group.description,
-            join_code: group.join_code,
-            user_role: existingMember.role,
-          },
+          squad: { ...group, user_role: memRows[0].role },
         });
       }
 
-      group.members.push({ user_id: userId, role: 'member', joined_at: new Date() });
-      await group.save();
+      await pool.query(
+        `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member')`,
+        [group.id, userId]
+      );
 
       return res.status(200).json({
         success: true,
         message: `Successfully joined ${group.name}!`,
-        squad: {
-          id: group.id,
-          name: group.name,
-          description: group.description,
-          join_code: group.join_code,
-          user_role: 'member',
-        },
+        squad: { ...group, user_role: 'member' },
       });
     } catch (err) {
       return next(err);
@@ -761,16 +773,15 @@ async function leaveSquad(req, res, next) {
     return res.status(400).json({ success: false, message: 'Invalid squad ID.' });
   }
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const group = await Group.findOne({ id: squadId, 'members.user_id': userId });
-      if (!group) {
+      const { rowCount } = await pool.query(
+        'DELETE FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [squadId, userId]
+      );
+      if (rowCount === 0) {
         return res.status(404).json({ success: false, message: 'Not a member of this squad.' });
       }
-
-      group.members = group.members.filter((m) => m.user_id !== userId);
-      await group.save();
-
       return res.json({ success: true, message: 'Successfully left the squad.' });
     } catch (err) {
       return next(err);
@@ -799,40 +810,28 @@ async function getSquadMembers(req, res, next) {
     return res.status(400).json({ success: false, message: 'Invalid squad ID.' });
   }
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const group = await Group.findOne({ id: squadId }).lean();
-      if (!group || !(group.members || []).some((m) => m.user_id === userId)) {
+      const { rows: check } = await pool.query(
+        'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [squadId, userId]
+      );
+      if (!check.length) {
         return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
       }
 
-      const memberUserIds = group.members.map((m) => m.user_id);
-      const users = await User.find({ id: { $in: memberUserIds } }).lean();
-      const userMap = new Map(users.map((u) => [u.id, u]));
-
-      // Aggregate XP contributed by squad members
-      const xpAgg = await Post.aggregate([
-        { $match: { group_id: squadId } },
-        { $group: { _id: '$author_id', totalXp: { $sum: '$xp_earned' } } },
-      ]);
-      const xpMap = new Map(xpAgg.map((x) => [x._id, x.totalXp]));
-
-      const members = group.members.map((m) => {
-        const u = userMap.get(m.user_id) || {};
-        return {
-          id: m.user_id,
-          name: u.name || `User ${m.user_id}`,
-          avatar_url: u.avatar_url || null,
-          role: m.role,
-          joined_at: m.joined_at,
-          xp_contributed: xpMap.get(m.user_id) || 100,
-        };
-      });
-
-      // Sort admin first
-      members.sort((a, b) => (b.role === 'admin' ? 1 : 0) - (a.role === 'admin' ? 1 : 0));
-
-      return res.json({ success: true, members });
+      const sql = `
+        SELECT u.id, u.name, u.avatar_url, gm.role, gm.joined_at,
+               COALESCE(SUM(p.xp_earned), 0)::int AS xp_contributed
+        FROM group_members gm
+        JOIN users u ON u.id = gm.user_id
+        LEFT JOIN posts p ON p.author_id = u.id AND p.group_id = gm.group_id
+        WHERE gm.group_id = $1
+        GROUP BY u.id, u.name, u.avatar_url, gm.role, gm.joined_at
+        ORDER BY (gm.role = 'admin') DESC, gm.joined_at ASC
+      `;
+      const { rows } = await pool.query(sql, [squadId]);
+      return res.json({ success: true, members: rows });
     } catch (err) {
       return next(err);
     }
@@ -871,22 +870,26 @@ async function updateSquad(req, res, next) {
 
   const { description, coverUrl, name } = req.body;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const group = await Group.findOne({ id: squadId });
-      if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-
-      const isAdmin = (group.members || []).some((m) => m.user_id === userId && m.role === 'admin');
-      if (!isAdmin) {
+      const { rows: adminCheck } = await pool.query(
+        `SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`,
+        [squadId, userId]
+      );
+      if (!adminCheck.length || adminCheck[0].role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Only squad admins can edit squad details.' });
       }
 
-      if (description !== undefined) group.description = description;
-      if (coverUrl !== undefined) group.cover_url = coverUrl;
-      if (name !== undefined) group.name = name;
-      await group.save();
-
-      return res.json({ success: true, squad: group });
+      const sql = `
+        UPDATE groups
+        SET description = COALESCE($2, description),
+            cover_url = COALESCE($3, cover_url),
+            name = COALESCE($4, name)
+        WHERE id = $1
+        RETURNING *
+      `;
+      const { rows } = await pool.query(sql, [squadId, description, coverUrl, name]);
+      return res.json({ success: true, squad: rows[0] });
     } catch (err) {
       return next(err);
     }
@@ -901,8 +904,6 @@ async function updateSquad(req, res, next) {
   return res.json({ success: true, squad: group });
 }
 
-// ── Squad Team Goals CRUD ──────────────────────────────────────────────────────
-
 /**
  * GET /api/bucketlist/squads/:squadId/goals
  * Returns team goals for a squad the user belongs to.
@@ -915,37 +916,46 @@ async function getTeamGoals(req, res, next) {
   }
   const { status, category } = req.query;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const group = await Group.findOne({ id: squadId, 'members.user_id': userId }).lean();
-      if (!group) {
+      // Verify user is a member of this squad
+      const { rows: memberRows } = await pool.query(
+        'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
+        [squadId, userId]
+      );
+      if (!memberRows.length) {
         return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
       }
 
-      const query = { group_id: squadId };
+      const conditions = ['i.group_id = $1'];
+      const params = [squadId];
+      let idx = 2;
+
       if (status && STATUS_TO_DB[status]) {
-        query.status = STATUS_TO_DB[status];
+        conditions.push(`i.status = $${idx++}`);
+        params.push(STATUS_TO_DB[status]);
       }
-      if (category) {
-        query.category = category.toUpperCase().trim();
+      if (category && ALLOWED_CATEGORIES.has(category.toUpperCase())) {
+        conditions.push(`i.category = $${idx++}`);
+        params.push(category.toUpperCase());
       }
 
-      const rows = await Item.find(query).sort({ created_at: -1 }).lean();
-
-      // Attach member details
-      const memberUserIds = (group.members || []).map((m) => m.user_id);
-      const users = await User.find({ id: { $in: memberUserIds } }).lean();
-      const userMap = new Map(users.map((u) => [u.id, u]));
-
-      const squadMembers = (group.members || []).map((m) => {
-        const u = userMap.get(m.user_id) || {};
-        return { id: m.user_id, name: u.name || `User ${m.user_id}`, role: m.role, avatar_url: u.avatar_url };
-      });
-
-      return res.json({
-        success: true,
-        goals: rows.map((r) => ({ ...mapItemToFrontend(r), members: squadMembers })),
-      });
+      const sql = `
+        SELECT i.*,
+          (
+            SELECT json_agg(json_build_object(
+              'id', u.id, 'name', u.name, 'role', gm.role, 'avatar_url', u.avatar_url
+            ))
+            FROM group_members gm
+            JOIN users u ON u.id = gm.user_id
+            WHERE gm.group_id = i.group_id
+          ) AS members
+        FROM items i
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY i.created_at DESC
+      `;
+      const { rows } = await pool.query(sql, params);
+      return res.json({ success: true, goals: rows.map(mapItemToFrontend) });
     } catch (err) {
       return next(err);
     }
@@ -971,8 +981,8 @@ async function getTeamGoals(req, res, next) {
   if (status && STATUS_TO_DB[status]) {
     items = items.filter((i) => i.status === STATUS_TO_DB[status]);
   }
-  if (category) {
-    items = items.filter((i) => (i.category || '').toUpperCase() === category.toUpperCase());
+  if (category && ALLOWED_CATEGORIES.has(category.toUpperCase())) {
+    items = items.filter((i) => i.category === category.toUpperCase());
   }
   return res.json({
     success: true,
@@ -995,41 +1005,44 @@ async function createTeamGoal(req, res, next) {
   const err = validateRequired(title, description);
   if (err) return res.status(400).json({ success: false, message: err });
 
-  const dbCategory = (category || 'ADVENTURE').toUpperCase().trim();
+  const dbCategory = ALLOWED_CATEGORIES.has((category || '').toUpperCase())
+    ? category.toUpperCase()
+    : 'ADVENTURE';
   const dbDifficulty = ALLOWED_DIFFICULTIES.has(difficulty) ? difficulty : 'medium';
   const dbPriority = ALLOWED_PRIORITIES.has(priority) ? priority : 'HIGH';
-  const dbDeadline = deadline ? new Date(deadline) : null;
+  const dbDeadline = deadline || null;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const group = await Group.findOne({ id: squadId, 'members.user_id': userId });
-      if (!group) {
+      // Verify user is a member
+      const { rows: memberRows } = await pool.query(
+        'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
+        [squadId, userId]
+      );
+      if (!memberRows.length) {
         return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
       }
 
-      const lastItem = await Item.findOne().sort({ id: -1 });
-      const newId = lastItem ? lastItem.id + 1 : 1;
-
-      const newTeamItem = await Item.create({
-        id: newId,
-        owner_id: userId,
-        group_id: squadId,
-        title: title.trim(),
-        description: (description || '').trim(),
-        category: dbCategory,
-        difficulty: dbDifficulty,
-        visibility: 'shared',
-        status: 'not_started',
-        progress: 0,
-        priority: dbPriority,
-        deadline: dbDeadline,
-        created_at: new Date(),
-        completed_at: null,
-      });
-
-      return res.status(201).json({ success: true, goal: mapItemToFrontend(newTeamItem) });
-    } catch (e) {
-      return next(e);
+      const sql = `
+        INSERT INTO items
+          (owner_id, group_id, title, description, category, difficulty,
+           visibility, status, progress, priority, deadline)
+        VALUES ($1, $2, $3, $4, $5, $6, 'shared', 'not_started', 0, $7, $8)
+        RETURNING *
+      `;
+      const { rows } = await pool.query(sql, [
+        userId,
+        squadId,
+        title.trim(),
+        (description || '').trim(),
+        dbCategory,
+        dbDifficulty,
+        dbPriority,
+        dbDeadline,
+      ]);
+      return res.status(201).json({ success: true, goal: mapItemToFrontend(rows[0]) });
+    } catch (err) {
+      return next(err);
     }
   }
 
@@ -1077,53 +1090,45 @@ async function updateTeamGoal(req, res, next) {
   const err = validateRequired(title, description);
   if (err) return res.status(400).json({ success: false, message: err });
 
-  const dbCategory = (category || 'ADVENTURE').toUpperCase().trim();
+  const dbCategory = ALLOWED_CATEGORIES.has((category || '').toUpperCase())
+    ? category.toUpperCase()
+    : 'ADVENTURE';
   const dbDifficulty = ALLOWED_DIFFICULTIES.has(difficulty) ? difficulty : 'medium';
   const dbPriority = ALLOWED_PRIORITIES.has(priority) ? priority : 'HIGH';
-  const dbDeadline = deadline ? new Date(deadline) : null;
+  const dbDeadline = deadline || null;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const updated = await Item.findOneAndUpdate(
-        { id: goalId, group_id: squadId, owner_id: userId },
-        {
-          title: title.trim(),
-          description: (description || '').trim(),
-          category: dbCategory,
-          difficulty: dbDifficulty,
-          priority: dbPriority,
-          deadline: dbDeadline,
-        },
-        { new: true }
-      );
-
-      if (!updated) {
+      const sql = `
+        UPDATE items
+        SET title=$4, description=$5, category=$6, difficulty=$7, priority=$8, deadline=$9
+        WHERE id=$1 AND group_id=$2 AND owner_id=$3
+        RETURNING *
+      `;
+      const { rows } = await pool.query(sql, [
+        goalId, squadId, userId,
+        title.trim(), (description || '').trim(),
+        dbCategory, dbDifficulty, dbPriority, dbDeadline,
+      ]);
+      if (!rows[0]) {
         return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
       }
-      return res.json({ success: true, goal: mapItemToFrontend(updated) });
-    } catch (e) {
-      return next(e);
+      return res.json({ success: true, goal: mapItemToFrontend(rows[0]) });
+    } catch (err) {
+      return next(err);
     }
   }
 
   const items = getInMemItems();
   const idx = items.findIndex((i) => i.id === goalId && i.group_id === squadId);
   if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
-  items[idx] = {
-    ...items[idx],
-    title: title.trim(),
-    description: (description || '').trim(),
-    category: dbCategory,
-    difficulty: dbDifficulty,
-    priority: dbPriority,
-    deadline: dbDeadline ? new Date(dbDeadline) : null,
-  };
+  items[idx] = { ...items[idx], title: title.trim(), description: (description || '').trim(), category: dbCategory, difficulty: dbDifficulty, priority: dbPriority, deadline: dbDeadline ? new Date(dbDeadline) : null };
   return res.json({ success: true, goal: mapItemToFrontend(items[idx]) });
 }
 
 /**
  * PATCH /api/bucketlist/squads/:squadId/goals/:id/status
- * Update status/progress of a team goal (any squad member).
+ * Update status/progress of a team goal (any member).
  */
 async function updateTeamGoalStatus(req, res, next) {
   const userId = req.user.id;
@@ -1141,31 +1146,29 @@ async function updateTeamGoalStatus(req, res, next) {
 
   let dbProgress = dbStatus === 'completed' ? 100 : dbStatus === 'not_started' ? 0 : (progress ?? null);
   if (dbProgress !== null) dbProgress = Math.max(0, Math.min(100, Number(dbProgress) || 0));
-  const completedAt = dbStatus === 'completed' ? new Date() : null;
+  const now = dbStatus === 'completed' ? new Date() : null;
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const group = await Group.findOne({ id: squadId, 'members.user_id': userId });
-      if (!group) {
+      // Verify membership
+      const { rows: memberRows } = await pool.query(
+        'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
+        [squadId, userId]
+      );
+      if (!memberRows.length) {
         return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
       }
-
-      const updateData = {
-        status: dbStatus,
-        completed_at: completedAt,
-      };
-      if (dbProgress !== null) {
-        updateData.progress = dbProgress;
-      }
-
-      const updated = await Item.findOneAndUpdate(
-        { id: goalId, group_id: squadId },
-        updateData,
-        { new: true }
-      );
-
-      if (!updated) return res.status(404).json({ success: false, message: 'Goal not found.' });
-      return res.json({ success: true, goal: mapItemToFrontend(updated) });
+      const sql = `
+        UPDATE items
+        SET status=$3,
+            progress=COALESCE($4, progress),
+            completed_at=COALESCE($5, completed_at)
+        WHERE id=$1 AND group_id=$2
+        RETURNING *
+      `;
+      const { rows } = await pool.query(sql, [goalId, squadId, dbStatus, dbProgress, now]);
+      if (!rows[0]) return res.status(404).json({ success: false, message: 'Goal not found.' });
+      return res.json({ success: true, goal: mapItemToFrontend(rows[0]) });
     } catch (err) {
       return next(err);
     }
@@ -1180,12 +1183,7 @@ async function updateTeamGoalStatus(req, res, next) {
   const items = getInMemItems();
   const idx = items.findIndex((i) => i.id === goalId && i.group_id === squadId);
   if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
-  items[idx] = {
-    ...items[idx],
-    status: dbStatus,
-    progress: dbProgress !== null ? dbProgress : items[idx].progress,
-    completed_at: dbStatus === 'completed' ? new Date() : items[idx].completed_at,
-  };
+  items[idx] = { ...items[idx], status: dbStatus, progress: dbProgress !== null ? dbProgress : items[idx].progress, completed_at: dbStatus === 'completed' ? new Date() : items[idx].completed_at };
   return res.json({ success: true, goal: mapItemToFrontend(items[idx]) });
 }
 
@@ -1201,10 +1199,13 @@ async function deleteTeamGoal(req, res, next) {
     return res.status(400).json({ success: false, message: 'Invalid ID.' });
   }
 
-  if (isMongoConnected()) {
+  if (isPgConnected()) {
     try {
-      const deleted = await Item.findOneAndDelete({ id: goalId, group_id: squadId, owner_id: userId });
-      if (!deleted) return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
+      const { rowCount } = await pool.query(
+        'DELETE FROM items WHERE id=$1 AND group_id=$2 AND owner_id=$3',
+        [goalId, squadId, userId]
+      );
+      if (rowCount === 0) return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
       return res.json({ success: true, message: 'Team goal deleted.' });
     } catch (err) {
       return next(err);

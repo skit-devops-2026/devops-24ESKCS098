@@ -1,7 +1,6 @@
-const { Post, Group, Badge, User } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+const { pool, isPgConnected, inMemoryStore } = require('../config/db');
 
-// Alex Rivero's Lifetime Conquests fallback presets
+// Alex Rivero's 14 Lifetime Conquests across squads (Sum = 3,910 XP)
 const ALEX_LIFETIME_CONQUESTS = [
   {
     id: 'comp-1',
@@ -89,87 +88,86 @@ async function getMyTrophyRoom(req, res, next) {
     const userId = req.user.id;
     const category = req.query.category || 'ALL';
 
-    // MongoDB Mode
-    if (isMongoConnected()) {
-      const [userPosts, userGroups, allBadges] = await Promise.all([
-        Post.find({ author_id: userId }).sort({ completed_at: -1 }).lean(),
-        Group.find({ 'members.user_id': userId }).lean(),
-        Badge.find({}).lean(),
-      ]);
+    if (isPgConnected()) {
+      // 1. Fetch user stats
+      const statsQuery = `
+        SELECT
+          COUNT(p.id)::int AS total_quests,
+          COALESCE(SUM(p.xp_earned), 0)::int AS total_xp,
+          (SELECT COUNT(*)::int FROM group_members WHERE user_id = $1) AS squad_count
+        FROM posts p
+        WHERE p.author_id = $1;
+      `;
+      const statsRes = await pool.query(statsQuery, [userId]);
+      const userStats = statsRes.rows[0] || { total_quests: 0, total_xp: 0, squad_count: 0 };
 
-      const totalQuests = userPosts.length;
-      const totalXp = userPosts.reduce((sum, p) => sum + (p.xp_earned || 0), 0) || 3910;
-      const squadCount = userGroups.length || 3;
+      // 2. Fetch Unlocked Badges
+      const badgesQuery = `
+        SELECT b.id, b.title, b.category, b.icon, b.description, b.bg_color,
+               TO_CHAR(ub.unlocked_at, 'Mon YYYY') AS unlocked_at
+        FROM user_badges ub
+        JOIN badges b ON b.id = ub.badge_id
+        WHERE ub.user_id = $1
+        ORDER BY ub.unlocked_at DESC;
+      `;
+      const badgesRes = await pool.query(badgesQuery, [userId]);
 
-      const badges = allBadges.map((b) => {
-        const unlock = (b.unlocked_by || []).find((u) => u.user_id === userId);
-        return {
+      // 3. Fetch Completed Quests Log
+      const questsQuery = `
+        SELECT
+          p.id, p.title, p.badge_label, p.stat_badge, p.caption AS note,
+          p.xp_earned, p.visibility, p.completed_at,
+          g.name AS squad_name,
+          COALESCE((SELECT json_agg(i.image_url) FROM post_images i WHERE i.post_id = p.id), '[]') AS proof_images
+        FROM posts p
+        LEFT JOIN groups g ON g.id = p.group_id
+        WHERE p.author_id = $1
+        ORDER BY p.completed_at DESC;
+      `;
+      const questsRes = await pool.query(questsQuery, [userId]);
+
+      let completedItems = questsRes.rows.map((q) => ({
+        id: `comp-${q.id}`,
+        postId: q.id,
+        title: q.title,
+        category: q.badge_label || 'ADVENTURE',
+        squad: q.squad_name || 'Personal Quest',
+        completedDate: new Date(q.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        image: Array.isArray(q.proof_images) && q.proof_images[0] ? q.proof_images[0] : 'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces',
+        stat: q.stat_badge || 'Milestone Conquered',
+        note: q.note,
+        isPrivate: q.visibility === 'personal',
+        xp: q.xp_earned,
+      }));
+
+      if (category !== 'ALL') {
+        completedItems = completedItems.filter((i) => i.category.toUpperCase().includes(category.toUpperCase()));
+      }
+
+      return res.json({
+        success: true,
+        stats: {
+          totalQuests: userStats.total_quests || 14,
+          totalXp: `${(userStats.total_xp || 3910).toLocaleString()} XP`,
+          currentRank: '#2',
+          streakWeeks: 4,
+          squadCount: userStats.squad_count || 3,
+        },
+        badges: badgesRes.rows.map((b) => ({
           id: b.id,
           title: b.title,
           category: b.category,
           icon: b.icon,
           desc: b.description,
-          bg: b.bg_color && b.bg_color.startsWith('#') ? `bg-[${b.bg_color}]` : b.bg_color || 'bg-[#ffed00]',
-          locked: !unlock,
-          progress: b.progress || null,
-          unlockedAt: unlock
-            ? new Date(unlock.unlocked_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-            : 'Locked 🔒',
-        };
-      });
-
-      const groupMap = new Map(userGroups.map((g) => [g.id, g.name]));
-      let completedItems = userPosts.map((p) => ({
-        id: `comp-${p.id}`,
-        postId: p.id,
-        title: p.title,
-        category: (p.badge_label || 'ADVENTURE').toUpperCase(),
-        squad: groupMap.get(p.group_id) || 'Personal Quest',
-        completedDate: new Date(p.completed_at).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-        }),
-        image:
-          (p.images && p.images[0]) ||
-          'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces',
-        stat: p.stat_badge || 'Milestone Conquered',
-        note: p.caption,
-        isPrivate: p.visibility === 'personal',
-        xp: p.xp_earned,
-      }));
-
-      // Combine with presets if user has few posts
-      const existingIds = new Set(completedItems.map((c) => c.postId));
-      const presetsToAdd = ALEX_LIFETIME_CONQUESTS.filter((c) => !existingIds.has(c.postId));
-      completedItems = [...completedItems, ...presetsToAdd];
-
-      if (category !== 'ALL') {
-        completedItems = completedItems.filter((i) =>
-          i.category.toUpperCase().includes(category.toUpperCase())
-        );
-      }
-
-      let currentRank = '#2';
-      if (totalXp > 2250) currentRank = '#1';
-      else if (totalXp >= 1800) currentRank = '#2';
-      else currentRank = '#3';
-
-      return res.json({
-        success: true,
-        stats: {
-          totalQuests: Math.max(totalQuests, completedItems.length),
-          totalXp: `${totalXp.toLocaleString()} XP`,
-          currentRank,
-          streakWeeks: 4,
-          squadCount,
-        },
-        badges,
+          bg: b.bg_color.startsWith('#') ? `bg-[${b.bg_color}]` : b.bg_color,
+          unlockedAt: b.unlocked_at,
+        })),
         completedItems,
       });
     }
 
-    // In-Memory Dev Store Mode Fallback
+    // In-Memory Dev Store Mode
+    // Any newly created user posts by Alex Rivero (excluding already seeded conquests)
     const existingPostIds = new Set(ALEX_LIFETIME_CONQUESTS.map((c) => c.postId));
     const newlyCreated = inMemoryStore.posts
       .filter((p) => (p.author_id === userId || p.author_id === 1) && !existingPostIds.has(p.id))
@@ -181,16 +179,8 @@ async function getMyTrophyRoom(req, res, next) {
           title: p.title || p.badge_label || 'Milestone Conquered',
           category: (p.category || p.badge_label || 'ADVENTURE').toUpperCase(),
           squad: p.squadName || squad.name,
-          completedDate: new Date(p.completed_at || Date.now()).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          }),
-          image:
-            (p.proof_images && p.proof_images[0]) ||
-            (p.proofImages && p.proofImages[0]) ||
-            p.image ||
-            'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces',
+          completedDate: new Date(p.completed_at || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          image: (p.proof_images && p.proof_images[0]) || (p.proofImages && p.proofImages[0]) || p.image || 'https://cdn-imgix.headout.com/tour/19210/TOUR-IMAGE/41bf9e61-4def-4e7d-bd13-a5b27ff477ae-SAWGD2-21-1-.jpg?auto=format&q=90&fit=crop&crop=faces',
           stat: p.stat_badge || p.statBadge || 'Milestone Conquered',
           note: p.caption,
           isPrivate: p.visibility === 'personal',
@@ -208,10 +198,12 @@ async function getMyTrophyRoom(req, res, next) {
     const totalXpNum = allAlexQuests.reduce((sum, p) => sum + (p.xp || p.xp_earned || 0), 0);
     const totalConquestsNum = allAlexQuests.length;
 
+    // Dynamically calculate activity streak based on completed quests
     const completedWeeks = new Set(
       allAlexQuests.map((q) => {
         const d = new Date(q.completedDate || q.completed_at || Date.now());
-        return Math.floor(d.getTime() / (7 * 24 * 60 * 60 * 1000));
+        const week = Math.floor(d.getTime() / (7 * 24 * 60 * 60 * 1000));
+        return week;
       })
     );
     const streakWeeks = Math.max(1, Math.min(8, completedWeeks.size));
@@ -254,3 +246,4 @@ async function getMyTrophyRoom(req, res, next) {
 module.exports = {
   getMyTrophyRoom,
 };
+

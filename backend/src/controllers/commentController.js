@@ -1,45 +1,38 @@
-const { Comment, Post, User } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+const { pool, isPgConnected, inMemoryStore } = require('../config/db');
 
 // GET /api/posts/:id/comments - List comments for a post
 async function getComments(req, res, next) {
   try {
     const postId = parseInt(req.params.id, 10);
-    const userId = req.user?.id || 1;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.max(1, parseInt(req.query.limit, 10) || 20);
     const offset = (page - 1) * limit;
 
-    // MongoDB Mode
-    if (isMongoConnected()) {
-      const commentsRaw = await Comment.find({ post_id: postId })
-        .sort({ created_at: 1 })
-        .skip(offset)
-        .limit(limit)
-        .lean();
+    if (isPgConnected()) {
+      const { rows } = await pool.query(
+        `SELECT c.id, c.text, c.created_at, u.id AS author_id, u.name AS author_name, u.avatar_url AS author_avatar
+         FROM comments c
+         JOIN users u ON u.id = c.author_id
+         WHERE c.post_id = $1
+         ORDER BY c.created_at ASC
+         LIMIT $2 OFFSET $3;`,
+        [postId, limit, offset]
+      );
 
-      const authorIds = [...new Set(commentsRaw.map((c) => c.author_id))];
-      const users = await User.find({ id: { $in: authorIds } }).lean();
-      const userMap = new Map(users.map((u) => [u.id, u]));
-
-      const comments = commentsRaw.map((c) => {
-        const author = userMap.get(c.author_id) || {};
-        return {
-          id: c.id,
-          authorId: c.author_id,
-          isOwner: c.author_id === userId,
-          name: c.author_name || author.name || 'Explorer',
-          avatar: author.avatar_url || '',
-          color: c.color || 'text-black',
-          text: c.text,
-          time: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-      });
+      const comments = rows.map((c) => ({
+        id: c.id,
+        authorId: c.author_id,
+        isOwner: c.author_id === userId,
+        name: c.author_name,
+        avatar: c.author_avatar,
+        text: c.text,
+        time: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }));
 
       return res.json({ success: true, comments });
     }
 
-    // In-Memory Dev Store Fallback
+    // In-Memory Dev Store
     const postComments = inMemoryStore.comments.filter((c) => c.post_id === postId);
     const paginated = postComments.slice(offset, offset + limit);
 
@@ -75,45 +68,30 @@ async function addComment(req, res, next) {
       return res.status(400).json({ success: false, message: 'Comment exceeds 300 characters limit' });
     }
 
-    // MongoDB Mode
-    if (isMongoConnected()) {
-      const post = await Post.findOne({ id: postId });
-      if (!post) {
-        return res.status(404).json({ success: false, message: 'Post not found' });
-      }
+    if (isPgConnected()) {
+      const { rows } = await pool.query(
+        `INSERT INTO comments (post_id, author_id, text)
+         VALUES ($1, $2, $3)
+         RETURNING id, text, created_at;`,
+        [postId, userId, text.trim()]
+      );
 
-      const user = await User.findOne({ id: userId });
-      const authorName = user ? user.name : (req.user.name || 'You');
+      const userRes = await pool.query(`SELECT name, avatar_url FROM users WHERE id = $1`, [userId]);
+      const author = userRes.rows[0] || { name: 'You' };
 
-      const lastComment = await Comment.findOne().sort({ id: -1 });
-      const newId = lastComment ? lastComment.id + 1 : 1;
+      const newComment = {
+        id: rows[0].id,
+        authorId: userId,
+        isOwner: true,
+        name: author.name,
+        text: rows[0].text,
+        time: 'Just now',
+      };
 
-      const commentDoc = await Comment.create({
-        id: newId,
-        post_id: postId,
-        author_id: userId,
-        author_name: authorName,
-        color: 'text-primary font-black',
-        text: text.trim(),
-        created_at: new Date(),
-      });
-
-      return res.status(201).json({
-        success: true,
-        comment: {
-          id: commentDoc.id,
-          authorId: userId,
-          isOwner: true,
-          name: authorName,
-          avatar: user ? user.avatar_url : '',
-          color: commentDoc.color,
-          text: commentDoc.text,
-          time: 'Just now',
-        },
-      });
+      return res.status(201).json({ success: true, comment: newComment });
     }
 
-    // In-Memory Dev Store Fallback
+    // In-Memory Dev Store
     const postExists = inMemoryStore.posts.some((p) => p.id === postId);
     if (!postExists) {
       return res.status(404).json({ success: false, message: 'Post not found' });
@@ -157,32 +135,26 @@ async function deleteComment(req, res, next) {
     const commentId = parseInt(req.params.id, 10);
     const userId = req.user.id;
 
-    // MongoDB Mode
-    if (isMongoConnected()) {
-      const comment = await Comment.findOne({ id: commentId });
-      if (!comment) {
+    if (isPgConnected()) {
+      // Check if comment exists first to give appropriate error message
+      const checkRes = await pool.query(`SELECT author_id FROM comments WHERE id = $1`, [commentId]);
+      if (checkRes.rows.length === 0) {
         return res.status(404).json({ success: false, message: 'Comment not found' });
       }
-      if (comment.author_id !== userId) {
-        return res.status(403).json({
-          success: false,
-          message: 'Unauthorized: You can only delete your own comments',
-        });
+      if (checkRes.rows[0].author_id !== userId) {
+        return res.status(403).json({ success: false, message: 'Unauthorized: You can only delete your own comments' });
       }
 
-      await Comment.deleteOne({ id: commentId });
+      await pool.query(`DELETE FROM comments WHERE id = $1 AND author_id = $2`, [commentId, userId]);
       return res.json({ success: true, message: 'Comment deleted' });
     }
 
-    // In-Memory Dev Store Fallback
     const comment = inMemoryStore.comments.find((c) => c.id === commentId);
     if (!comment) return res.status(404).json({ success: false, message: 'Comment not found' });
-
+    
+    // Strict ownership validation: only author can delete their comment
     if (comment.author_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Unauthorized: You can only delete your own comments',
-      });
+      return res.status(403).json({ success: false, message: 'Unauthorized: You can only delete your own comments' });
     }
 
     const idx = inMemoryStore.comments.indexOf(comment);

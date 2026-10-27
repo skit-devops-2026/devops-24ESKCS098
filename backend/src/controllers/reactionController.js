@@ -1,5 +1,4 @@
-const { Reaction } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+const { pool, isPgConnected, inMemoryStore } = require('../config/db');
 
 // PUT /api/posts/:id/reaction - Add or change reaction
 async function upsertReaction(req, res, next) {
@@ -10,30 +9,27 @@ async function upsertReaction(req, res, next) {
 
     const validTypes = ['like', 'fire', 'clap', 'party', 'epic', 'star'];
     if (!validTypes.includes(type.toLowerCase())) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid reaction type. Valid: ${validTypes.join(', ')}`,
-      });
+      return res.status(400).json({ success: false, message: `Invalid reaction type. Valid: ${validTypes.join(', ')}` });
     }
 
     const normType = type.toLowerCase();
 
-    // MongoDB Mode
-    if (isMongoConnected()) {
-      await Reaction.findOneAndUpdate(
-        { post_id: postId, user_id: userId },
-        { type: normType, created_at: new Date() },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+    if (isPgConnected()) {
+      await pool.query(
+        `INSERT INTO reactions (post_id, user_id, type)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (post_id, user_id)
+         DO UPDATE SET type = EXCLUDED.type, created_at = NOW();`,
+        [postId, userId, normType]
       );
 
-      const countsRaw = await Reaction.aggregate([
-        { $match: { post_id: postId } },
-        { $group: { _id: '$type', count: { $sum: 1 } } },
-      ]);
-
+      const countsRes = await pool.query(
+        `SELECT type, COUNT(*)::int AS count FROM reactions WHERE post_id = $1 GROUP BY type`,
+        [postId]
+      );
       const reactionCounts = {};
-      countsRaw.forEach((r) => {
-        reactionCounts[r._id] = r.count;
+      countsRes.rows.forEach((r) => {
+        reactionCounts[r.type] = r.count;
       });
 
       return res.json({
@@ -44,7 +40,7 @@ async function upsertReaction(req, res, next) {
       });
     }
 
-    // In-Memory Dev Store Fallback
+    // In-Memory Dev Store
     const existingIdx = inMemoryStore.reactions.findIndex(
       (r) => r.post_id === postId && r.user_id === userId
     );
@@ -78,18 +74,16 @@ async function deleteReaction(req, res, next) {
     const postId = parseInt(req.params.id, 10);
     const userId = req.user.id;
 
-    // MongoDB Mode
-    if (isMongoConnected()) {
-      await Reaction.deleteOne({ post_id: postId, user_id: userId });
+    if (isPgConnected()) {
+      await pool.query(`DELETE FROM reactions WHERE post_id = $1 AND user_id = $2`, [postId, userId]);
 
-      const countsRaw = await Reaction.aggregate([
-        { $match: { post_id: postId } },
-        { $group: { _id: '$type', count: { $sum: 1 } } },
-      ]);
-
+      const countsRes = await pool.query(
+        `SELECT type, COUNT(*)::int AS count FROM reactions WHERE post_id = $1 GROUP BY type`,
+        [postId]
+      );
       const reactionCounts = {};
-      countsRaw.forEach((r) => {
-        reactionCounts[r._id] = r.count;
+      countsRes.rows.forEach((r) => {
+        reactionCounts[r.type] = r.count;
       });
 
       return res.json({
@@ -100,7 +94,6 @@ async function deleteReaction(req, res, next) {
       });
     }
 
-    // In-Memory Dev Store Fallback
     const existingIdx = inMemoryStore.reactions.findIndex(
       (r) => r.post_id === postId && r.user_id === userId
     );
