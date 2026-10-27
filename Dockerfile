@@ -1,6 +1,4 @@
-# ============================================
 # Stage 1 — Build the React/Vite frontend
-# ============================================
 FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
@@ -12,10 +10,8 @@ COPY frontend/ ./frontend/
 RUN npm ci
 RUN npm run build
 
-# ============================================
-# Stage 2 — Run the Express backend + serve
-#            the built frontend
-# ============================================
+
+# Stage 2 — Run the Express backend + serve the built frontend
 FROM node:20-alpine AS production
 
 WORKDIR /app
