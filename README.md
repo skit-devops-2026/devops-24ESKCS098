@@ -25,9 +25,14 @@ make run
 
 ## Live URL
 
-<Add once M5 is done. Until then, leave as is.>
+https://lifequest-tb7g.onrender.com
 
 ## Health endpoint
 
-`GET /health` returns the running commit SHA. See `Makefile` and the milestone
-sheet for why this is required.
+`GET /health` — returns the running commit SHA and service status.
+
+```bash
+curl https://lifequest-tb7g.onrender.com/health
+```
+
+Also available at `GET /api/health`.

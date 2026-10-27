@@ -1,65 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import api from '../services/api';
+import React from 'react';
 
-const LEADERBOARD = [
+const OTHER_PLAYERS = [
   {
-    rank: 1,
-    medal: '🥇',
+    id: 'elena',
     name: 'Elena Vance',
-    xp: '2,250 XP',
-    bg: 'bg-[#ffed00]',
+    rawXp: 2250,
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA3HSnRMBfUiKLTTVz-r9NlkIjnrrTThFp0IbPVXpLlNPgMWEAE_AzPF_3q1gKLdZtX-L2sM4DUopi_V0Ad3Pp8ksOmvEFDvrrAc2i_1iWfI_k6mumBPHLcfeYS02rfVIKx20CG7tpGJns9Vvf-XqJZpJqOwTAZypQz_Kep1VB4T3TxHsRD6mThSxw9ril9D1rQH_471vxMCpyXu39zev5Rr7-s3esElO6fB82dRXi7s6TWbsLAAaY9',
   },
   {
-    rank: 2,
-    medal: '🥈',
-    name: 'Alex Rivero',
-    xp: '1,950 XP',
-    bg: 'bg-gray-100',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
+    id: 'priya',
+    name: 'Priya Sharma',
+    rawXp: 1800,
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
   },
   {
-    rank: 3,
-    medal: '🥉',
-    name: 'Priya Sharma',
-    xp: '1,800 XP',
-    bg: 'bg-[#ffdad6]',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
+    id: 'sarah',
+    name: 'Sarah Chen',
+    rawXp: 1550,
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&q=80',
+  },
+  {
+    id: 'marco',
+    name: 'Marco Polo',
+    rawXp: 1400,
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80',
   },
 ];
 
-function Leaderboard({ onViewFullRankings, refreshTrigger }) {
-  const [entries, setEntries] = useState(LEADERBOARD);
-  const [myRank, setMyRank] = useState({ rank: 2, xp: '1,950 XP' });
+function Leaderboard({ onViewFullRankings, userXp = 1950 }) {
+  const allParticipants = [
+    ...OTHER_PLAYERS,
+    {
+      id: 'alex',
+      name: 'Alex Rivero',
+      rawXp: userXp,
+      isMe: true,
+      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
+    },
+  ];
 
-  useEffect(() => {
-    let isMounted = true;
-    api.getLeaderboard({ limit: 3 })
-      .then((data) => {
-        if (!isMounted || !data) return;
-        if (Array.isArray(data.top) && data.top.length > 0) {
-          const formatted = data.top.map((item, idx) => ({
-            rank: item.rank,
-            medal: item.medal || (idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'),
-            name: (item.name || '').replace(/\s*\(You\)/i, ''),
-            xp: typeof item.xp === 'number' ? `${item.xp.toLocaleString()} XP` : item.xp,
-            bg: item.rank === 1 ? 'bg-[#ffed00]' : item.rank === 2 ? 'bg-gray-100' : 'bg-[#ffdad6]',
-            avatar: item.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`,
-          }));
-          setEntries(formatted);
-        }
-        if (data.me) {
-          setMyRank({
-            rank: data.me.rank || 2,
-            xp: typeof data.me.xp === 'number' ? `${data.me.xp.toLocaleString()} XP` : data.me.xp || '3,910 XP',
-          });
-        }
-      })
-      .catch((err) => {
-        console.info('Using static leaderboard cache:', err.message);
-      });
-    return () => { isMounted = false; };
-  }, [refreshTrigger]);
+  const sorted = [...allParticipants].sort((a, b) => b.rawXp - a.rawXp);
+
+  const ranked = sorted.map((p, idx) => ({
+    ...p,
+    rank: idx + 1,
+    medal: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`,
+    bg: idx === 0 ? 'bg-[#ffed00]' : idx === 1 ? 'bg-gray-100' : 'bg-[#ffdad6]',
+    xp: `${p.rawXp.toLocaleString()} XP`,
+  }));
+
+  const entries = ranked.slice(0, 3);
+  const myPlayer = ranked.find((p) => p.isMe) || { rank: 1, xp: `${userXp.toLocaleString()} XP` };
+  const myRank = { rank: myPlayer.rank, xp: `${userXp.toLocaleString()} XP` };
 
   return (
     <div className="bg-white border-4 border-black rounded-xl p-6 flex flex-col gap-6 sticky top-24 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
