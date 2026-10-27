@@ -86,6 +86,11 @@ async function addComment(req, res, next) {
     }
 
     // In-Memory Dev Store
+    const postExists = inMemoryStore.posts.some((p) => p.id === postId);
+    if (!postExists) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
     const user = inMemoryStore.users.find((u) => u.id === userId) || { name: 'You (Alex)' };
     const newId = inMemoryStore.comments.length > 0 ? Math.max(...inMemoryStore.comments.map((c) => c.id)) + 1 : 1;
 

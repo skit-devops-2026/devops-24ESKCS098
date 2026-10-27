@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lifequest
+  labels:
+    app: lifequest
+spec:
+  type: LoadBalancer
+  selector:
+    app: lifequest
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 5000
