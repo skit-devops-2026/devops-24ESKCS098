@@ -9,6 +9,12 @@ const pool = new Pool({
   connectionTimeoutMillis: 3000,
 });
 
+// Guard against unhandled error events emitted by idle pool clients
+pool.on('error', (err) => {
+  isPgConnected = false;
+  // Intentionally caught so the server process won't crash when DB is unreachable
+});
+
 let isPgConnected = false;
 
 // Test connection on boot

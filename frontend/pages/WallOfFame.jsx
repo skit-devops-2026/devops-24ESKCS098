@@ -30,8 +30,8 @@ const INITIAL_FEED_ITEMS = [
     reactionCounts: { '🔥': 14, '⭐': 8, '🙌': 12, '🎉': 6 },
     userReaction: '🔥',
     commentList: [
-      { name: 'Sarah Chen', color: 'text-[#e4006c]', text: 'Amazing job, you crushed it! 🚀', time: '45m ago' },
-      { name: 'Marco Polo', color: 'text-[#686000]', text: "Total inspiration. Which one's next? 🌏", time: '30m ago' },
+      { id: 1, authorId: 4, isOwner: false, name: 'Sarah Chen', color: 'text-[#e4006c]', text: 'Amazing job, you crushed it! 🚀', time: '45m ago' },
+      { id: 2, authorId: 5, isOwner: false, name: 'Marco Polo', color: 'text-[#686000]', text: "Total inspiration. Which one's next? 🌏", time: '30m ago' },
     ],
   },
   {
@@ -56,7 +56,7 @@ const INITIAL_FEED_ITEMS = [
     reactionCounts: { '🔥': 22, '👏': 15, '🎉': 9 },
     userReaction: null,
     commentList: [
-      { name: 'Elena Vance', color: 'text-[#006877]', text: 'That view is unreal Priya! Proud of you!', time: '2h ago' },
+      { id: 3, authorId: 3, isOwner: false, name: 'Elena Vance', color: 'text-[#006877]', text: 'That view is unreal Priya! Proud of you!', time: '2h ago' },
     ],
   },
   {
@@ -81,7 +81,7 @@ const INITIAL_FEED_ITEMS = [
     reactionCounts: { '🔥': 18, '💪': 14, '🎉': 7 },
     userReaction: null,
     commentList: [
-      { name: 'Alex Rivero', color: 'text-[#e4006c]', text: 'Unbelievable pace Elena! Beast mode activated! 🚀', time: '1d ago' },
+      { id: 4, authorId: 1, isOwner: true, name: 'Alex Rivero', color: 'text-[#e4006c]', text: 'Unbelievable pace Elena! Beast mode activated! 🚀', time: '1d ago' },
     ],
   },
 ];
@@ -131,12 +131,15 @@ function WallOfFame() {
 
   const handlePostAchievement = async (newItem) => {
     try {
+      const isSolo = newItem.squadName?.toLowerCase().includes('solo') || newItem.isSolo;
       const res = await api.createPost({
         title: newItem.title || newItem.badge,
         caption: newItem.subtitle,
         badgeLabel: newItem.badge,
         category: newItem.category || 'ADVENTURE',
         statBadge: newItem.statBadge,
+        groupId: isSolo ? null : (newItem.groupId || 1),
+        type: isSolo ? 'solo' : 'group',
         imageUrls: newItem.image ? [newItem.image] : [],
         proofImages: newItem.image ? [newItem.image] : [],
         image: newItem.image,
@@ -147,6 +150,7 @@ function WallOfFame() {
       const createdItem = res && res.post ? {
         ...newItem,
         id: res.post.id,
+        squadName: isSolo ? 'Solo Quest 👤' : (newItem.squadName || 'Trip Squad'),
         xpEarned: res.post.xp_earned || newItem.xpEarned,
       } : newItem;
       setFeedItems((prev) => [createdItem, ...prev]);

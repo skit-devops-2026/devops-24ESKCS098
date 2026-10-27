@@ -26,6 +26,7 @@ const PHOTO_PRESETS = [
 ];
 
 const AVAILABLE_SQUADS = [
+  'Solo Quest 👤',
   'Trip Squad ✈️',
   'College Gang 🎓',
   'Family Adventure 🏡',
@@ -41,13 +42,14 @@ const FRIENDS_LIST = [
   'Riya Sharma',
 ];
 
-const CATEGORY_OPTIONS = ['ADVENTURE', 'TRAVEL', 'FITNESS', 'SKILLS', 'SQUAD'];
+const CATEGORY_OPTIONS = ['ADVENTURE', 'TRAVEL', 'FITNESS', 'SKILLS', 'SQUAD', 'CUSTOM'];
 
 function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }) {
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [selectedSquad, setSelectedSquad] = useState(AVAILABLE_SQUADS[0]);
   const [category, setCategory] = useState('ADVENTURE');
+  const [customCategory, setCustomCategory] = useState('');
   const [badgeText, setBadgeText] = useState('Epic Milestone');
   const [statBadge, setStatBadge] = useState('');
   const [selectedFriends, setSelectedFriends] = useState([]);
@@ -66,14 +68,21 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
       setSubtitle(goal.description ? `Conquered "${goal.title}"! ${goal.description}` : `Conquered "${goal.title}" with the squad!`);
       if (goal.category) {
         setBadgeText(`${goal.category} Champion 🏆`);
-        if (CATEGORY_OPTIONS.includes(goal.category.toUpperCase())) {
-          setCategory(goal.category.toUpperCase());
+        const catUpper = goal.category.toUpperCase();
+        if (CATEGORY_OPTIONS.includes(catUpper) && catUpper !== 'CUSTOM') {
+          setCategory(catUpper);
+          setCustomCategory('');
+        } else {
+          setCategory('CUSTOM');
+          setCustomCategory(catUpper);
         }
       }
     } else {
       setTitle('');
       setSubtitle('');
       setBadgeText('Epic Milestone');
+      setCategory('ADVENTURE');
+      setCustomCategory('');
     }
   }, [goal, isOpen]);
 
@@ -135,26 +144,34 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (category === 'CUSTOM' && !customCategory.trim()) return;
 
     setIsSubmitting(true);
 
+    const isSolo = selectedSquad.toLowerCase().includes('solo');
+    const resolvedCategory =
+      category === 'CUSTOM'
+        ? (customCategory.trim().toUpperCase() || 'CUSTOM')
+        : category;
+
     const newAchievement = {
       id: Date.now(),
-      filter: 'my-groups',
+      filter: isSolo ? 'this-week' : 'my-groups',
       title: title.trim(),
-      category: category,
+      category: resolvedCategory,
       badge: badgeText || 'Quest Conquered',
       badgeStyle: { background: '#ffed00', color: '#000000' },
       name: 'Alex Rivero (You)',
-      subtitle: subtitle.trim() || `Conquered "${title}" with the squad!`,
+      subtitle: subtitle.trim() || (isSolo ? `Conquered "${title}" solo!` : `Conquered "${title}" with the squad!`),
       avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
       image: imageUrl,
       likes: 1,
       hasLiked: true,
       comments: 0,
-      squadName: selectedSquad.split(' ')[0] + ' ' + (selectedSquad.split(' ')[1] || ''),
+      squadName: isSolo ? 'Solo Quest 👤' : selectedSquad,
+      isSolo,
       xpEarned: xpEarned,
-      statBadge: statBadge.trim() || 'Verified Proof ⚡',
+      statBadge: statBadge.trim() || (isSolo ? 'Solo Milestone 🎯' : 'Verified Proof ⚡'),
       completionDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       taggedFriends: selectedFriends.map((f) => ({ name: f })),
       reactions: ['🔥', '🎉'],
@@ -236,7 +253,7 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block font-space font-bold uppercase text-xs mb-1.5 text-black">
-                Share With Squad
+                Quest Type / Squad
               </label>
               <select
                 value={selectedSquad}
@@ -256,12 +273,17 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
               </label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  if (e.target.value !== 'CUSTOM') {
+                    setCustomCategory('');
+                  }
+                }}
                 className="w-full px-3 py-2 bg-white border-3 border-black rounded-xl font-space font-bold text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
               >
                 {CATEGORY_OPTIONS.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {c === 'CUSTOM' ? '✏️ CUSTOM' : c}
                   </option>
                 ))}
               </select>
@@ -279,6 +301,29 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
               />
             </div>
           </div>
+
+          {/* Custom Category Input Box (appears when CUSTOM is selected) */}
+          {category === 'CUSTOM' && (
+            <div className="p-3.5 bg-yellow-100 border-3 border-black rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1">
+                <label className="block font-space font-black uppercase text-xs mb-1 text-black">
+                  Enter Custom Category <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value.toUpperCase())}
+                  placeholder="e.g. GAMING, MUSIC, FOODIE, CAREER..."
+                  className="w-full px-3.5 py-2 bg-white border-2 border-black rounded-lg font-space font-bold text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-0 focus:border-black placeholder:normal-case placeholder:font-medium placeholder:text-black/40"
+                  autoFocus
+                />
+              </div>
+              <div className="text-[11px] font-space font-bold text-black/70 sm:max-w-[200px] leading-tight">
+                💡 This category tag will be stamped on your trophy badge &amp; Wall of Fame post.
+              </div>
+            </div>
+          )}
 
           {/* Story / Subtitle */}
           <div>
