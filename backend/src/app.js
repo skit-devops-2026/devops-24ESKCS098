@@ -6,6 +6,7 @@ const leaderboardRoutes = require('./routes/leaderboardRoutes');
 const trophyRoomRoutes = require('./routes/trophyRoomRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const commentRoutes = require('./routes/commentRoutes');
+const bucketlistRoutes = require('./routes/bucketlistRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -14,7 +15,7 @@ const app = express();
 app.use(cors({
   origin: '*', // Allow Vite frontend during development
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-dev-user-id'],
 }));
 
 app.use(express.json({ limit: '20mb' }));
@@ -39,6 +40,7 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/trophy-room', trophyRoomRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/bucketlist', bucketlistRoutes);
 
 // Serve the built frontend in production
 const publicDir = path.join(__dirname, '..', 'public');
