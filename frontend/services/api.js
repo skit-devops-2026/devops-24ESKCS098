@@ -127,7 +127,8 @@ export const api = {
   //
   // Status values sent to/from the API follow frontend convention:
   //   'not-started' | 'in-progress' | 'completed'
-  // The backend maps these to the PostgreSQL CHECK constraint values automatically.
+  // The backend maps these to/from MongoDB values automatically.
+  // Goal and Group IDs are MongoDB ObjectId strings when MongoDB is connected.
 
   /** Dev-mode headers. Replace with JWT in production. */
   _bucketlistHeaders(devUserId = 1) {
@@ -287,6 +288,19 @@ export const api = {
     return request(`/bucketlist/squads/${squadId}/goals/${goalId}`, {
       method: 'DELETE',
       headers: api._bucketlistHeaders(devUserId),
+    });
+  },
+
+  /**
+   * Update the current user's individual contribution toward a team goal.
+   * This records per-member progress without overwriting other members' data.
+   * The backend recalculates the overall goal progress from all contributions.
+   */
+  updateMemberContribution: async (squadId, goalId, { progress, note }, { devUserId } = {}) => {
+    return request(`/bucketlist/squads/${squadId}/goals/${goalId}/contribution`, {
+      method: 'PATCH',
+      headers: api._bucketlistHeaders(devUserId),
+      body: JSON.stringify({ progress, note }),
     });
   },
 };

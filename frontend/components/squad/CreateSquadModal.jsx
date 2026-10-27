@@ -32,13 +32,19 @@ const CATEGORIES = [
   { id: 'FOODIE', label: 'Foodie', emoji: '🍕' },
 ];
 
-function CreateSquadModal({ isOpen, onClose, onCreateSquad }) {
+function CreateSquadModal({ isOpen, onClose, onCreateSquad, onJoinSquad }) {
+  const [mode, setMode] = useState('create'); // 'create' | 'join'
   const [step, setStep] = useState(1);
   const [squadName, setSquadName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('TRAVEL');
   const [selectedCover, setSelectedCover] = useState(COVER_PRESETS[0].url);
   const [isPrivate, setIsPrivate] = useState(true);
+
+  // Join squad state
+  const [enterJoinCode, setEnterJoinCode] = useState('');
+  const [joinSubmitting, setJoinSubmitting] = useState(false);
+  const [joinError, setJoinError] = useState(null);
 
   // Step 2 generated code
   const [joinCode, setJoinCode] = useState('');
@@ -47,7 +53,10 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad }) {
 
   useEffect(() => {
     if (isOpen) {
+      setMode('create');
       setStep(1);
+      setEnterJoinCode('');
+      setJoinError(null);
       setCopiedCode(false);
       setCopiedLink(false);
       // Generate a cool join code like LQ-8492
@@ -89,20 +98,30 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad }) {
 
   const handleFinish = () => {
     if (onCreateSquad) {
+      // Pass only name + description — the backend generates join_code, id, etc.
       onCreateSquad({
-        id: squadName.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(),
         name: squadName,
         description,
-        category,
-        avatar: selectedCover,
-        members: 1,
-        activeQuests: 0,
-        unreadCount: 0,
-        joinCode,
-        isPrivate,
       });
     }
     onClose();
+  };
+
+  const handleJoinSubmit = async (e) => {
+    e.preventDefault();
+    if (!enterJoinCode.trim()) return;
+    setJoinSubmitting(true);
+    setJoinError(null);
+    try {
+      if (onJoinSquad) {
+        await onJoinSquad(enterJoinCode.trim());
+      }
+      onClose();
+    } catch (err) {
+      setJoinError(err.message || 'Failed to join squad. Check code and try again.');
+    } finally {
+      setJoinSubmitting(false);
+    }
   };
 
   const shareUrl = `https://lifequest.app/join/${joinCode}`;
@@ -122,40 +141,125 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad }) {
               SQUAD PROTOCOL ⚡
             </span>
             <span className="font-mono text-xs font-black text-neutral-800">
-              {step === 1 ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
+              {mode === 'join' ? 'JOIN BY CODE' : step === 1 ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
             </span>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 bg-black hover:bg-brand-pink text-white font-black text-sm flex items-center justify-center rounded brutal-border-sm transition-colors"
+            className="w-8 h-8 bg-black hover:bg-brand-pink text-white font-black text-sm flex items-center justify-center rounded brutal-border-sm transition-colors cursor-pointer"
           >
             ✕
           </button>
         </div>
 
-        {/* Step Indicator */}
-        <div className="grid grid-cols-2 bg-neutral-100 border-b-2 border-black font-mono text-xs font-black text-center">
-          <div
-            className={`py-2 flex items-center justify-center gap-1.5 border-r-2 border-black ${
-              step === 1 ? 'bg-brand-yellow text-black' : 'text-neutral-500 bg-white'
-            }`}
-          >
-            <span>1. Squad Details</span>
-            {step === 2 && <span className="text-black">✓</span>}
+        {/* Mode Selector Tabs (Create vs Join) */}
+        {onJoinSquad && (
+          <div className="grid grid-cols-2 bg-neutral-100 border-b-2 border-black font-mono text-xs font-black">
+            <button
+              type="button"
+              onClick={() => { setMode('create'); setJoinError(null); }}
+              className={`py-2.5 text-center transition-colors cursor-pointer border-r-2 border-black ${
+                mode === 'create'
+                  ? 'bg-brand-yellow text-black font-extrabold shadow-inner'
+                  : 'bg-white text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              ✨ CREATE SQUAD
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('join'); setJoinError(null); }}
+              className={`py-2.5 text-center transition-colors cursor-pointer ${
+                mode === 'join'
+                  ? 'bg-brand-cyan text-black font-extrabold shadow-inner'
+                  : 'bg-white text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              🔑 JOIN WITH CODE
+            </button>
           </div>
-          <div
-            className={`py-2 flex items-center justify-center gap-1.5 ${
-              step === 2 ? 'bg-brand-yellow text-black' : 'text-neutral-500'
-            }`}
-          >
-            <span>2. Invite Pass & Code</span>
+        )}
+
+        {/* ── Mode: JOIN SQUAD ── */}
+        {mode === 'join' && (
+          <div className="p-6 md:p-8 space-y-6">
+            <div className="space-y-1">
+              <h2 className="font-display font-black text-2xl uppercase tracking-tight text-neutral-900">
+                Join An Existing Squad
+              </h2>
+              <p className="font-hanken text-xs text-neutral-600">
+                Enter the secret squad join code provided by your squad admin (e.g. LQ-TRIP).
+              </p>
+            </div>
+
+            <form onSubmit={handleJoinSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label className="block font-mono text-xs font-black uppercase text-neutral-800">
+                  Secret Join Code <span className="text-brand-pink">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. LQ-TRIP or LQ-8492"
+                  value={enterJoinCode}
+                  onChange={(e) => {
+                    setEnterJoinCode(e.target.value.toUpperCase());
+                    setJoinError(null);
+                  }}
+                  className="w-full px-4 py-3 bg-white brutal-border-sm rounded-lg font-mono font-bold text-base tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-brand-cyan shadow-brutal-sm placeholder:tracking-normal placeholder:font-sans"
+                />
+                {joinError && (
+                  <p className="text-xs font-mono text-red-600 font-bold bg-red-50 p-2 rounded border border-red-200">
+                    ⚠️ {joinError}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-5 py-3 rounded-xl font-space font-bold text-sm bg-neutral-200 hover:bg-neutral-300 text-black border-2 border-black transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={joinSubmitting || !enterJoinCode.trim()}
+                  className="flex-1 py-3 px-6 rounded-xl font-space font-black text-sm uppercase bg-brand-cyan hover:bg-[#a6ecfc] active:translate-x-0.5 active:translate-y-0.5 text-black brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {joinSubmitting ? 'Joining Squad...' : '⚡ Enter Squad & Start Questing'}
+                </button>
+              </div>
+            </form>
           </div>
-        </div>
+        )}
+
+        {/* Step Indicator (Create Mode) */}
+        {mode === 'create' && (
+          <div className="grid grid-cols-2 bg-neutral-100 border-b-2 border-black font-mono text-xs font-black text-center">
+            <div
+              className={`py-2 flex items-center justify-center gap-1.5 border-r-2 border-black ${
+                step === 1 ? 'bg-brand-yellow text-black' : 'text-neutral-500 bg-white'
+              }`}
+            >
+              <span>1. Squad Details</span>
+              {step === 2 && <span className="text-black">✓</span>}
+            </div>
+            <div
+              className={`py-2 flex items-center justify-center gap-1.5 ${
+                step === 2 ? 'bg-brand-yellow text-black' : 'text-neutral-500'
+              }`}
+            >
+              <span>2. Invite Pass & Code</span>
+            </div>
+          </div>
+        )}
 
         {/* Step 1: Squad Details Form */}
-        {step === 1 && (
+        {mode === 'create' && step === 1 && (
           <form onSubmit={handleNextStep} className="p-6 md:p-8 space-y-5">
             <div className="space-y-1">
               <h2 className="font-display font-black text-2xl uppercase tracking-tight text-neutral-900">
@@ -286,7 +390,7 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad }) {
         )}
 
         {/* Step 2: Boarding Pass & Shareable Invite */}
-        {step === 2 && (
+        {mode === 'create' && step === 2 && (
           <div className="p-6 md:p-8 space-y-6">
             {/* Retro Boarding Pass / Ticket */}
             <div className="relative bg-white brutal-border-lg rounded-2xl shadow-brutal-lg overflow-hidden">
