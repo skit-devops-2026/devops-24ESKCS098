@@ -50,6 +50,7 @@ tmp/
 *.tmp
 myArchive.txt
 wof.txt
+docs
 
 # 6. Database dumps & local files
 *.sqlite
@@ -83,4 +84,4 @@ Desktop.ini
 *.swo
 
 # 10. Local docs & notes
-# docs/ — NOT ignored: M6 requires deployment screenshots here
+# docs/ — NOT ignored: M6 requires deployment screenshots here

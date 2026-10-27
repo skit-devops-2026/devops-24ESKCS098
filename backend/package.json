@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "db:init": "node src/db/initDb.js"
+    "db:seed": "node src/db/seed.js",
+    "test": "node test_bucketlist_api.js"
   },
   "dependencies": {
     "cloudinary": "^1.41.3",
@@ -14,6 +15,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.11.4",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.13.1"
   }

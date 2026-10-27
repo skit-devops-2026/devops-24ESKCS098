@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import api from '../../services/api';
 
 const FULL_RANKINGS = [
   {
@@ -79,10 +78,25 @@ const FULL_RANKINGS = [
   },
 ];
 
-function FullLeaderboardModal({ isOpen, onClose }) {
+function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
   const [filterTab, setFilterTab] = useState('ALL_TIME');
   const [searchQuery, setSearchQuery] = useState('');
-  const [rankings, setRankings] = useState(FULL_RANKINGS);
+
+  const currentRankings = FULL_RANKINGS.map((item) => {
+    if (item.isCurrentUser || item.name.includes('Alex Rivero')) {
+      return {
+        ...item,
+        xp: userXp,
+      };
+    }
+    return item;
+  })
+    .sort((a, b) => b.xp - a.xp)
+    .map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      medal: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null,
+    }));
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -92,27 +106,9 @@ function FullLeaderboardModal({ isOpen, onClose }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    let isMounted = true;
-    const period = filterTab === 'THIS_MONTH' ? 'monthly' : 'all-time';
-
-    api.getLeaderboard({ period, search: searchQuery, limit: 50 })
-      .then((data) => {
-        if (isMounted && data && Array.isArray(data.top) && data.top.length > 0) {
-          setRankings(data.top);
-        }
-      })
-      .catch((err) => {
-        console.info('Using local rankings cache:', err.message);
-      });
-
-    return () => { isMounted = false; };
-  }, [isOpen, filterTab, searchQuery]);
-
   if (!isOpen) return null;
 
-  const filtered = rankings
+  const filtered = currentRankings
     .filter(
       (u) =>
         u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

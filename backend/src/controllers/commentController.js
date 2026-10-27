@@ -1,36 +1,45 @@
-const { pool, isPgConnected, inMemoryStore } = require('../config/db');
+const { Comment, Post, User } = require('../models');
+const { isMongoConnected, inMemoryStore } = require('../config/db');
 
 // GET /api/posts/:id/comments - List comments for a post
 async function getComments(req, res, next) {
   try {
     const postId = parseInt(req.params.id, 10);
+    const userId = req.user?.id || 1;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.max(1, parseInt(req.query.limit, 10) || 20);
     const offset = (page - 1) * limit;
 
-    if (isPgConnected()) {
-      const { rows } = await pool.query(
-        `SELECT c.id, c.text, c.created_at, u.id AS author_id, u.name AS author_name, u.avatar_url AS author_avatar
-         FROM comments c
-         JOIN users u ON u.id = c.author_id
-         WHERE c.post_id = $1
-         ORDER BY c.created_at ASC
-         LIMIT $2 OFFSET $3;`,
-        [postId, limit, offset]
-      );
+    // MongoDB Mode
+    if (isMongoConnected()) {
+      const commentsRaw = await Comment.find({ post_id: postId })
+        .sort({ created_at: 1 })
+        .skip(offset)
+        .limit(limit)
+        .lean();
 
-      const comments = rows.map((c) => ({
-        id: c.id,
-        name: c.author_name,
-        avatar: c.author_avatar,
-        text: c.text,
-        time: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }));
+      const authorIds = [...new Set(commentsRaw.map((c) => c.author_id))];
+      const users = await User.find({ id: { $in: authorIds } }).lean();
+      const userMap = new Map(users.map((u) => [u.id, u]));
+
+      const comments = commentsRaw.map((c) => {
+        const author = userMap.get(c.author_id) || {};
+        return {
+          id: c.id,
+          authorId: c.author_id,
+          isOwner: c.author_id === userId,
+          name: c.author_name || author.name || 'Explorer',
+          avatar: author.avatar_url || '',
+          color: c.color || 'text-black',
+          text: c.text,
+          time: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+      });
 
       return res.json({ success: true, comments });
     }
 
-    // In-Memory Dev Store
+    // In-Memory Dev Store Fallback
     const postComments = inMemoryStore.comments.filter((c) => c.post_id === postId);
     const paginated = postComments.slice(offset, offset + limit);
 
@@ -38,6 +47,8 @@ async function getComments(req, res, next) {
       success: true,
       comments: paginated.map((c) => ({
         id: c.id,
+        authorId: c.author_id,
+        isOwner: c.author_id === userId,
         name: c.author_name,
         color: c.color || 'text-black',
         text: c.text,
@@ -64,28 +75,50 @@ async function addComment(req, res, next) {
       return res.status(400).json({ success: false, message: 'Comment exceeds 300 characters limit' });
     }
 
-    if (isPgConnected()) {
-      const { rows } = await pool.query(
-        `INSERT INTO comments (post_id, author_id, text)
-         VALUES ($1, $2, $3)
-         RETURNING id, text, created_at;`,
-        [postId, userId, text.trim()]
-      );
+    // MongoDB Mode
+    if (isMongoConnected()) {
+      const post = await Post.findOne({ id: postId });
+      if (!post) {
+        return res.status(404).json({ success: false, message: 'Post not found' });
+      }
 
-      const userRes = await pool.query(`SELECT name, avatar_url FROM users WHERE id = $1`, [userId]);
-      const author = userRes.rows[0] || { name: 'You' };
+      const user = await User.findOne({ id: userId });
+      const authorName = user ? user.name : (req.user.name || 'You');
 
-      const newComment = {
-        id: rows[0].id,
-        name: author.name,
-        text: rows[0].text,
-        time: 'Just now',
-      };
+      const lastComment = await Comment.findOne().sort({ id: -1 });
+      const newId = lastComment ? lastComment.id + 1 : 1;
 
-      return res.status(201).json({ success: true, comment: newComment });
+      const commentDoc = await Comment.create({
+        id: newId,
+        post_id: postId,
+        author_id: userId,
+        author_name: authorName,
+        color: 'text-primary font-black',
+        text: text.trim(),
+        created_at: new Date(),
+      });
+
+      return res.status(201).json({
+        success: true,
+        comment: {
+          id: commentDoc.id,
+          authorId: userId,
+          isOwner: true,
+          name: authorName,
+          avatar: user ? user.avatar_url : '',
+          color: commentDoc.color,
+          text: commentDoc.text,
+          time: 'Just now',
+        },
+      });
     }
 
-    // In-Memory Dev Store
+    // In-Memory Dev Store Fallback
+    const postExists = inMemoryStore.posts.some((p) => p.id === postId);
+    if (!postExists) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
     const user = inMemoryStore.users.find((u) => u.id === userId) || { name: 'You (Alex)' };
     const newId = inMemoryStore.comments.length > 0 ? Math.max(...inMemoryStore.comments.map((c) => c.id)) + 1 : 1;
 
@@ -105,6 +138,8 @@ async function addComment(req, res, next) {
       success: true,
       comment: {
         id: newComment.id,
+        authorId: userId,
+        isOwner: true,
         name: newComment.author_name,
         color: newComment.color,
         text: newComment.text,
@@ -122,19 +157,35 @@ async function deleteComment(req, res, next) {
     const commentId = parseInt(req.params.id, 10);
     const userId = req.user.id;
 
-    if (isPgConnected()) {
-      const { rowCount } = await pool.query(
-        `DELETE FROM comments
-         WHERE id = $1
-           AND (author_id = $2 OR post_id IN (SELECT id FROM posts WHERE author_id = $2))`,
-        [commentId, userId]
-      );
-      if (rowCount === 0) return res.status(404).json({ success: false, message: 'Comment not found or unauthorized' });
+    // MongoDB Mode
+    if (isMongoConnected()) {
+      const comment = await Comment.findOne({ id: commentId });
+      if (!comment) {
+        return res.status(404).json({ success: false, message: 'Comment not found' });
+      }
+      if (comment.author_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Unauthorized: You can only delete your own comments',
+        });
+      }
+
+      await Comment.deleteOne({ id: commentId });
       return res.json({ success: true, message: 'Comment deleted' });
     }
 
-    const idx = inMemoryStore.comments.findIndex((c) => c.id === commentId);
-    if (idx === -1) return res.status(404).json({ success: false, message: 'Comment not found' });
+    // In-Memory Dev Store Fallback
+    const comment = inMemoryStore.comments.find((c) => c.id === commentId);
+    if (!comment) return res.status(404).json({ success: false, message: 'Comment not found' });
+
+    if (comment.author_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized: You can only delete your own comments',
+      });
+    }
+
+    const idx = inMemoryStore.comments.indexOf(comment);
     inMemoryStore.comments.splice(idx, 1);
     res.json({ success: true, message: 'Comment deleted' });
   } catch (err) {

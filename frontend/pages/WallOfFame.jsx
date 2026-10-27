@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Leaderboard from '../components/Leaderboard';
 import FeedCard from '../components/FeedCard';
 import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
 import FullLeaderboardModal from '../components/walloffame/FullLeaderboardModal';
 import PersonalTrophyRoom from '../components/walloffame/PersonalTrophyRoom';
 import ShareableCardModal from '../components/walloffame/ShareableCardModal';
-import api from '../services/api';
 
 const INITIAL_FEED_ITEMS = [
   {
@@ -30,8 +29,8 @@ const INITIAL_FEED_ITEMS = [
     reactionCounts: { '🔥': 14, '⭐': 8, '🙌': 12, '🎉': 6 },
     userReaction: '🔥',
     commentList: [
-      { name: 'Sarah Chen', color: 'text-[#e4006c]', text: 'Amazing job, you crushed it! 🚀', time: '45m ago' },
-      { name: 'Marco Polo', color: 'text-[#686000]', text: "Total inspiration. Which one's next? 🌏", time: '30m ago' },
+      { id: 1, authorId: 4, isOwner: false, name: 'Sarah Chen', color: 'text-[#e4006c]', text: 'Amazing job, you crushed it! 🚀', time: '45m ago' },
+      { id: 2, authorId: 5, isOwner: false, name: 'Marco Polo', color: 'text-[#686000]', text: "Total inspiration. Which one's next? 🌏", time: '30m ago' },
     ],
   },
   {
@@ -56,7 +55,7 @@ const INITIAL_FEED_ITEMS = [
     reactionCounts: { '🔥': 22, '👏': 15, '🎉': 9 },
     userReaction: null,
     commentList: [
-      { name: 'Elena Vance', color: 'text-[#006877]', text: 'That view is unreal Priya! Proud of you!', time: '2h ago' },
+      { id: 3, authorId: 3, isOwner: false, name: 'Elena Vance', color: 'text-[#006877]', text: 'That view is unreal Priya! Proud of you!', time: '2h ago' },
     ],
   },
   {
@@ -81,7 +80,7 @@ const INITIAL_FEED_ITEMS = [
     reactionCounts: { '🔥': 18, '💪': 14, '🎉': 7 },
     userReaction: null,
     commentList: [
-      { name: 'Alex Rivero', color: 'text-[#e4006c]', text: 'Unbelievable pace Elena! Beast mode activated! 🚀', time: '1d ago' },
+      { id: 4, authorId: 1, isOwner: true, name: 'Alex Rivero', color: 'text-[#e4006c]', text: 'Unbelievable pace Elena! Beast mode activated! 🚀', time: '1d ago' },
     ],
   },
 ];
@@ -92,83 +91,105 @@ const FILTERS = [
   { key: 'this-week', label: 'This Week', activeBg: 'bg-[#ffdad6] text-black' },
 ];
 
+const BASE_XP = 1950;
+const INITIAL_POST_IDS = new Set([1, 2, 3]);
+
+const computeXpFromPosts = (posts) => {
+  if (!Array.isArray(posts)) return BASE_XP;
+  const addedXp = posts
+    .filter((p) => p && (p.isOwner || (typeof p.id === 'number' && p.id > 100)))
+    .filter((p) => !INITIAL_POST_IDS.has(p.id))
+    .reduce((sum, p) => sum + (Number(p.xpEarned || p.xp) || 250), 0);
+  return BASE_XP + addedXp;
+};
+
 function WallOfFame() {
   const [viewMode, setViewMode] = useState('squad-feed'); // 'squad-feed' | 'trophy-room'
-  const [feedItems, setFeedItems] = useState(INITIAL_FEED_ITEMS);
-  const [weeklyQuestsCount, setWeeklyQuestsCount] = useState(18);
+  const [feedItems, setFeedItems] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lifequest_walloffame_posts_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_FEED_ITEMS;
+  });
+  const [weeklyQuestsCount, setWeeklyQuestsCount] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lifequest_weekly_count_v1');
+      if (saved) return parseInt(saved, 10);
+    } catch {}
+    return 18;
+  });
   const [activeFilter, setActiveFilter] = useState('all');
   const [isCelebrateOpen, setIsCelebrateOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [shareItem, setShareItem] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
-  const [refreshLeaderboardTrigger, setRefreshLeaderboardTrigger] = useState(0);
-
-  // Live Backend Feed & Weekly Stats Fetching
-  useEffect(() => {
-    let isMounted = true;
-    api.getFeed(activeFilter)
-      .then((data) => {
-        if (isMounted && data && Array.isArray(data.posts) && data.posts.length > 0) {
-          setFeedItems(data.posts);
-        }
-      })
-      .catch((err) => {
-        console.info('Backend offline or initializing; displaying cached feed items:', err.message);
-      });
-
-    api.getWeeklyStats()
-      .then((data) => {
-        if (isMounted && data && typeof data.count === 'number') {
-          setWeeklyQuestsCount(data.count || 18);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      isMounted = false;
-    };
-  }, [activeFilter]);
-
-  const handlePostAchievement = async (newItem) => {
+  const [userXp, setUserXp] = useState(() => {
     try {
-      const res = await api.createPost({
-        title: newItem.title || newItem.badge,
-        caption: newItem.subtitle,
-        badgeLabel: newItem.badge,
-        category: newItem.category || 'ADVENTURE',
-        statBadge: newItem.statBadge,
-        imageUrls: newItem.image ? [newItem.image] : [],
-        proofImages: newItem.image ? [newItem.image] : [],
-        image: newItem.image,
-        xp: newItem.xpEarned || 250,
-        visibility: 'shared',
-        taggedFriendIds: newItem.taggedFriends?.map((_, i) => i + 2) || [],
-      });
-      const createdItem = res && res.post ? {
-        ...newItem,
-        id: res.post.id,
-        xpEarned: res.post.xp_earned || newItem.xpEarned,
-      } : newItem;
-      setFeedItems((prev) => [createdItem, ...prev]);
-      setRefreshLeaderboardTrigger((prev) => prev + 1);
-    } catch {
-      // Offline fallback
-      setFeedItems((prev) => [newItem, ...prev]);
-      setRefreshLeaderboardTrigger((prev) => prev + 1);
-    }
-    setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${newItem.xpEarned} XP)`);
+      const saved = localStorage.getItem('lifequest_walloffame_posts_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return computeXpFromPosts(parsed);
+        }
+      }
+    } catch {}
+    return BASE_XP;
+  });
+
+  const handlePostAchievement = (newItem) => {
+    const isSolo = newItem.squadName?.toLowerCase().includes('solo') || newItem.isSolo;
+    const addedXp = Number(newItem.xpEarned) || 250;
+
+    const createdItem = {
+      ...newItem,
+      id: Date.now(),
+      name: 'Alex Rivero (You)',
+      isOwner: true,
+      squadName: isSolo ? 'Solo Quest 👤' : (newItem.squadName || 'Trip Squad'),
+      xpEarned: addedXp,
+      completionDate: 'Just now',
+    };
+
+    const nextFeed = [createdItem, ...feedItems];
+    const nextXp = computeXpFromPosts(nextFeed);
+    const nextWeekly = weeklyQuestsCount + 1;
+
+    setFeedItems(nextFeed);
+    setUserXp(nextXp);
+    setWeeklyQuestsCount(nextWeekly);
+
+    try {
+      localStorage.setItem('lifequest_walloffame_posts_v2', JSON.stringify(nextFeed));
+      localStorage.setItem('lifequest_user_xp_v1', String(nextXp));
+      localStorage.setItem('lifequest_weekly_count_v1', String(nextWeekly));
+    } catch {}
+
+    setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${addedXp} XP)`);
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const handleDeletePost = async (postId) => {
+  const handleDeletePost = (postId) => {
+    const target = feedItems.find((p) => p.id === postId);
+    const subXp = Number(target?.xpEarned || target?.xp) || 250;
+    const nextFeed = feedItems.filter((p) => p.id !== postId);
+    const nextXp = computeXpFromPosts(nextFeed);
+    const nextWeekly = Math.max(18, weeklyQuestsCount - 1);
+
+    setFeedItems(nextFeed);
+    setUserXp(nextXp);
+    setWeeklyQuestsCount(nextWeekly);
+
     try {
-      await api.deletePost(postId);
-    } catch (err) {
-      console.warn('Backend delete failed (or in offline mode):', err.message);
-    }
-    setFeedItems((prev) => prev.filter((p) => p.id !== postId));
-    setRefreshLeaderboardTrigger((prev) => prev + 1);
-    setToastMessage('🗑️ Post deleted successfully!');
+      localStorage.setItem('lifequest_walloffame_posts_v2', JSON.stringify(nextFeed));
+      localStorage.setItem('lifequest_user_xp_v1', String(nextXp));
+      localStorage.setItem('lifequest_weekly_count_v1', String(nextWeekly));
+    } catch {}
+
+    setToastMessage(`🗑️ Post deleted successfully! (-${subXp} XP)`);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -324,7 +345,7 @@ function WallOfFame() {
             {/* Leaderboard Column */}
             <aside className="lg:col-span-1">
               <Leaderboard
-                refreshTrigger={refreshLeaderboardTrigger}
+                userXp={userXp}
                 onViewFullRankings={() => setIsLeaderboardOpen(true)}
               />
             </aside>
@@ -333,7 +354,10 @@ function WallOfFame() {
       ) : (
         /* Personal Achievement Log (Section 4) */
         <div className="pt-8">
-          <PersonalTrophyRoom refreshTrigger={refreshLeaderboardTrigger} />
+          <PersonalTrophyRoom
+            userXp={userXp}
+            userPosts={feedItems}
+          />
         </div>
       )}
 
@@ -347,6 +371,7 @@ function WallOfFame() {
       <FullLeaderboardModal
         isOpen={isLeaderboardOpen}
         onClose={() => setIsLeaderboardOpen(false)}
+        userXp={userXp}
       />
 
       <ShareableCardModal
