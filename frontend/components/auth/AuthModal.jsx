@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../../context/AuthContext';
 
-function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
-  const [tab, setTab] = useState(initialTab); // 'login' | 'signup'
+function AuthModal({ isOpen: propIsOpen, onClose: propOnClose, initialTab, onAuthSuccess }) {
+  const { isAuthModalOpen, authModalTab, closeAuthModal, login, register } = useAuth();
+
+  const isOpen = propIsOpen !== undefined ? propIsOpen : isAuthModalOpen;
+  const onClose = propOnClose || closeAuthModal;
+  const defaultTab = initialTab || authModalTab || 'login';
+
+  const [tab, setTab] = useState(defaultTab); // 'login' | 'signup'
   const [showPassword, setShowPassword] = useState(false);
   const [selectedVibe, setSelectedVibe] = useState('TRAVEL');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -17,9 +25,9 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
   const [feedback, setFeedback] = useState(null);
 
   useEffect(() => {
-    setTab(initialTab);
+    if (defaultTab) setTab(defaultTab);
     setFeedback(null);
-  }, [initialTab, isOpen]);
+  }, [defaultTab, isOpen]);
 
   // Handle Escape key
   useEffect(() => {
@@ -34,27 +42,41 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setFeedback({
-      type: 'success',
-      message:
-        tab === 'login'
-          ? 'Welcome back, Adventurer! Signing in...'
-          : 'LifeQuest Passport minted! Welcome to the Squad.',
-    });
+    setIsSubmitting(true);
+    setFeedback(null);
 
-    setTimeout(() => {
-      if (onAuthSuccess) {
-        onAuthSuccess({
-          name: formData.name || (formData.email ? formData.email.split('@')[0] : 'Squad Leader'),
-          email: formData.email,
-          avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
-          vibe: selectedVibe,
+    try {
+      let user;
+      if (tab === 'login') {
+        user = await login(formData.email, formData.password);
+        setFeedback({
+          type: 'success',
+          message: 'Welcome back, Adventurer! Signing in...',
+        });
+      } else {
+        user = await register(formData.name, formData.email, formData.password, selectedVibe);
+        setFeedback({
+          type: 'success',
+          message: 'LifeQuest Passport minted! Welcome to the Squad.',
         });
       }
-      onClose();
-    }, 900);
+
+      setTimeout(() => {
+        if (onAuthSuccess) {
+          onAuthSuccess(user);
+        }
+        onClose();
+      }, 600);
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Authentication failed. Please check your credentials.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const VIBES = [
@@ -141,8 +163,16 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
 
           {/* Status Feedback Toast */}
           {feedback && (
-            <div className="p-3 bg-brand-lime text-black font-mono text-xs font-black rounded-lg brutal-border-sm shadow-brutal-sm flex items-center gap-2 animate-bounce">
-              <span className="material-symbols-outlined text-lg">check_circle</span>
+            <div
+              className={`p-3 font-mono text-xs font-black rounded-lg brutal-border-sm shadow-brutal-sm flex items-center gap-2 ${
+                feedback.type === 'error'
+                  ? 'bg-rose-500 text-white border-black'
+                  : 'bg-brand-lime text-black border-black animate-bounce'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">
+                {feedback.type === 'error' ? 'error' : 'check_circle'}
+              </span>
               <span>{feedback.message}</span>
             </div>
           )}
@@ -256,9 +286,18 @@ function AuthModal({ isOpen, onClose, initialTab = 'login', onAuthSuccess }) {
             {/* Submit Action */}
             <button
               type="submit"
-              className="w-full py-3 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 text-black font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all flex items-center justify-center gap-2 mt-2"
+              disabled={isSubmitting}
+              className={`w-full py-3 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 text-black font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all flex items-center justify-center gap-2 mt-2 ${
+                isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
             >
-              <span>{tab === 'login' ? 'Unlock Your Quests 🚀' : 'Mint Your Passport ➔'}</span>
+              <span>
+                {isSubmitting
+                  ? 'Verifying Passport...'
+                  : tab === 'login'
+                  ? 'Unlock Your Quests 🚀'
+                  : 'Mint Your Passport ➔'}
+              </span>
             </button>
           </form>
 

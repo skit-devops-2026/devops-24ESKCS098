@@ -5,7 +5,7 @@ const { calculateXP } = require('../utils/xp');
 // GET /api/posts - Wall of Fame Feed
 async function getFeed(req, res, next) {
   try {
-    const userId = req.user.id;
+    const userId = req.user ? req.user.id : null;
     const filter = req.query.filter || 'all';
     const groupId = req.query.groupId ? parseInt(req.query.groupId, 10) : null;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -14,8 +14,8 @@ async function getFeed(req, res, next) {
 
     // MongoDB Mode
     if (isMongoConnected()) {
-      // Find groups user is a member of
-      const userGroups = await Group.find({ 'members.user_id': userId }).select('id').lean();
+      // Find groups user is a member of (if authenticated)
+      const userGroups = userId ? await Group.find({ 'members.user_id': userId }).select('id').lean() : [];
       const userGroupIds = userGroups.map((g) => g.id);
 
       const query = { visibility: 'shared' };

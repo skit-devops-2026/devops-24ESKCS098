@@ -31,10 +31,9 @@ import SquadMembersWidget from '../components/squad/SquadMembersWidget';
 
 import { STATUS_FILTERS } from '../components/bucketlist/constants';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 // ── Dev configuration ──────────────────────────────────────────────────────────
-// Change this to match a seeded user id when testing multi-user behaviour.
-// When real auth is implemented, replace this with the token from auth context.
 const DEV_USER_ID = 1;
 
 // ── Loading / Error skeleton ───────────────────────────────────────────────────
@@ -80,6 +79,9 @@ function ErrorState({ message, onRetry }) {
 // ── BucketList Page ────────────────────────────────────────────────────────────
 
 function BucketList() {
+  const { currentUser, isAuthenticated, openAuthModal } = useAuth();
+  const currentUserId = currentUser?.id || DEV_USER_ID;
+
   // ── Tab ──────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('personal');
 
@@ -128,9 +130,14 @@ function BucketList() {
 
   // ── Load squads ───────────────────────────────────────────────────────────
   const loadSquads = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSquadsLoading(false);
+      setSquads([]);
+      return;
+    }
     setSquadsLoading(true);
     try {
-      const data = await api.getSquads({ devUserId: DEV_USER_ID });
+      const data = await api.getSquads({ devUserId: currentUserId });
       const BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
       const mapped = (data.squads || []).map((s, idx) => {
         const emojiMatch = (s.name || '').match(/(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
@@ -158,49 +165,61 @@ function BucketList() {
     } finally {
       setSquadsLoading(false);
     }
-  }, [activeSquadId]);
+  }, [isAuthenticated, currentUserId, activeSquadId]);
 
   // ── Load personal goals ───────────────────────────────────────────────────
   const loadPersonalGoals = useCallback(async () => {
+    if (!isAuthenticated) {
+      setGoalsLoading(false);
+      setGoals([]);
+      return;
+    }
     setGoalsLoading(true);
     setGoalsError(null);
     try {
-      const data = await api.getPersonalGoals({ devUserId: DEV_USER_ID });
+      const data = await api.getPersonalGoals({ devUserId: currentUserId });
       setGoals(data.goals || []);
     } catch (err) {
       setGoalsError(err.message || 'Could not load your goals. Check backend connection.');
     } finally {
       setGoalsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated, currentUserId]);
 
   // ── Load team goals for active squad ─────────────────────────────────────
   const loadTeamGoals = useCallback(async (squadId) => {
-    if (!squadId) return;
+    if (!squadId || !isAuthenticated) return;
     setTeamGoalsLoading(true);
     setTeamGoalsError(null);
     try {
-      const data = await api.getTeamGoals(squadId, { devUserId: DEV_USER_ID });
+      const data = await api.getTeamGoals(squadId, { devUserId: currentUserId });
       setTeamGoals(data.goals || []);
     } catch (err) {
       setTeamGoalsError(err.message || 'Could not load team goals.');
     } finally {
       setTeamGoalsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated, currentUserId]);
 
   // ── Initial fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
-    loadSquads();
-    loadPersonalGoals();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isAuthenticated) {
+      loadSquads();
+      loadPersonalGoals();
+    } else {
+      setGoals([]);
+      setSquads([]);
+      setGoalsLoading(false);
+      setSquadsLoading(false);
+    }
+  }, [isAuthenticated, loadSquads, loadPersonalGoals]);
 
   // ── Load team goals whenever squad or tab changes ─────────────────────────
   useEffect(() => {
-    if (activeTab === 'team' && activeSquadId) {
+    if (isAuthenticated && activeTab === 'team' && activeSquadId) {
       loadTeamGoals(activeSquadId);
     }
-  }, [activeTab, activeSquadId, loadTeamGoals]);
+  }, [isAuthenticated, activeTab, activeSquadId, loadTeamGoals]);
 
   // ── Personal goal filtering ───────────────────────────────────────────────
   const filteredGoals = goals.filter((goal) => {
@@ -223,7 +242,7 @@ function BucketList() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const data = await api.createPersonalGoal(goalData, { devUserId: DEV_USER_ID });
+      const data = await api.createPersonalGoal(goalData, { devUserId: currentUserId });
       setGoals((prev) => [data.goal, ...prev]);
       setShowForm(false);
       setActiveFilter('all');
@@ -251,7 +270,7 @@ function BucketList() {
           deadline: updated.deadline,
           priority: updated.priority,
         },
-        { devUserId: DEV_USER_ID }
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
@@ -275,7 +294,7 @@ function BucketList() {
       const data = await api.updateGoalStatus(
         goalId,
         { status: newStatus, progress },
-        { devUserId: DEV_USER_ID }
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
@@ -292,7 +311,7 @@ function BucketList() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await api.deletePersonalGoal(id, { devUserId: DEV_USER_ID });
+      await api.deletePersonalGoal(id, { devUserId: currentUserId });
       setGoals((prev) => prev.filter((g) => g.id !== id));
       setSelectedGoal(null);
       showToast('🗑️ Goal deleted.');
@@ -326,7 +345,7 @@ function BucketList() {
           targetSquadId,
           updated.id,
           { status: updated.status, progress: updated.progress },
-          { devUserId: DEV_USER_ID }
+          { devUserId: currentUserId }
         );
         const saved = data.goal;
 
@@ -336,7 +355,7 @@ function BucketList() {
               targetSquadId,
               updated.id,
               { progress: updated.progress, note: note.trim() },
-              { devUserId: DEV_USER_ID }
+              { devUserId: currentUserId }
             );
           } catch (e) {
             console.warn('Could not record contribution note:', e);
@@ -372,7 +391,7 @@ function BucketList() {
     try {
       const data = await api.createSquad(
         { name: newSquadData.name, description: newSquadData.description || '' },
-        { devUserId: DEV_USER_ID }
+        { devUserId: currentUserId }
       );
       const squad = data.squad;
       const BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
@@ -406,7 +425,7 @@ function BucketList() {
     setJoinLoading(true);
     setJoinError(null);
     try {
-      const data = await api.joinSquad(code.trim(), { devUserId: DEV_USER_ID });
+      const data = await api.joinSquad(code.trim(), { devUserId: currentUserId });
       const squad = data.squad;
       const BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
       const emojiMatch = (squad.name || '').match(/(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
@@ -443,7 +462,7 @@ function BucketList() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await api.leaveSquad(squadId, { devUserId: DEV_USER_ID });
+      await api.leaveSquad(squadId, { devUserId: currentUserId });
       const remaining = squads.filter((s) => s.id !== squadId);
       setSquads(remaining);
       setActiveSquadId(remaining.length > 0 ? remaining[0].id : null);
@@ -462,7 +481,7 @@ function BucketList() {
     if (!activeSquadId || submitting) return;
     setSubmitting(true);
     try {
-      const data = await api.createTeamGoal(activeSquadId, goalData, { devUserId: DEV_USER_ID });
+      const data = await api.createTeamGoal(activeSquadId, goalData, { devUserId: currentUserId });
       setTeamGoals((prev) => [data.goal, ...prev]);
       showToast(`✅ Team goal "${data.goal.title}" created!`);
     } catch (err) {
@@ -487,7 +506,7 @@ function BucketList() {
           deadline: updated.deadline,
           priority: updated.priority,
         },
-        { devUserId: DEV_USER_ID }
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setTeamGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
@@ -509,7 +528,7 @@ function BucketList() {
         activeSquadId,
         goalId,
         { status: newStatus, progress },
-        { devUserId: DEV_USER_ID }
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setTeamGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
@@ -522,7 +541,7 @@ function BucketList() {
     if (!activeSquadId || submitting) return;
     setSubmitting(true);
     try {
-      await api.deleteTeamGoal(activeSquadId, id, { devUserId: DEV_USER_ID });
+      await api.deleteTeamGoal(activeSquadId, id, { devUserId: currentUserId });
       setTeamGoals((prev) => prev.filter((g) => g.id !== id));
       showToast('🗑️ Team goal deleted.');
     } catch (err) {
@@ -590,24 +609,80 @@ function BucketList() {
       `}</style>
 
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-12 flex gap-8">
-        {/* Sidebar: Squad Switcher + Category Filters */}
-        <aside className="hidden lg:block w-72 shrink-0">
-          <div className="sticky top-24">
-            <SquadSidebar
-              squads={squads}
-              activeSquadId={activeSquadId}
-              onSelectSquad={(id) => {
-                setActiveSquadId(id);
-                if (activeTab === 'team') loadTeamGoals(id);
-              }}
-              selectedCategory={activeCategory === 'all' ? null : activeCategory}
-              onSelectCategory={(cat) => setActiveCategory(cat || 'all')}
-              onAddGroupClick={() => setIsCreateSquadOpen(true)}
-            />
-          </div>
-        </aside>
+        {!isAuthenticated ? (
+          <div className="flex-1 py-10">
+            <div className="bg-brand-canvas brutal-border-lg rounded-2xl shadow-brutal-xl p-8 md:p-14 text-center max-w-2xl mx-auto space-y-6">
+              <div className="w-20 h-20 bg-brand-yellow brutal-border rounded-2xl shadow-brutal flex items-center justify-center mx-auto text-4xl -rotate-3">
+                🎒
+              </div>
+              <div className="space-y-2">
+                <span className="font-mono text-xs font-black uppercase tracking-wider bg-black text-brand-yellow px-3 py-1 rounded inline-block">
+                  PASSPORT REQUIRED ⚡
+                </span>
+                <h1 className="font-display font-black text-3xl md:text-5xl uppercase tracking-tight text-neutral-900">
+                  Your Bucket List Awaits
+                </h1>
+                <p className="font-hanken text-base text-neutral-700 max-w-md mx-auto">
+                  Create your personal dream board, join adventure squads, level up your XP, and conquer life milestones with friends.
+                </p>
+              </div>
 
-        <div className="flex-1 space-y-8">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-left">
+                <div className="p-4 bg-white brutal-border-sm rounded-xl shadow-brutal-sm">
+                  <span className="text-2xl mb-1 block">🎯</span>
+                  <h4 className="font-space font-black text-xs uppercase">Track Goals</h4>
+                  <p className="font-hanken text-xs text-neutral-600 mt-1">From Mt. Fuji sunrise to learning guitar.</p>
+                </div>
+                <div className="p-4 bg-white brutal-border-sm rounded-xl shadow-brutal-sm">
+                  <span className="text-2xl mb-1 block">🤝</span>
+                  <h4 className="font-space font-black text-xs uppercase">Squad Challenges</h4>
+                  <p className="font-hanken text-xs text-neutral-600 mt-1">Conquer epic team quests together.</p>
+                </div>
+                <div className="p-4 bg-white brutal-border-sm rounded-xl shadow-brutal-sm">
+                  <span className="text-2xl mb-1 block">🏆</span>
+                  <h4 className="font-space font-black text-xs uppercase">Wall of Fame</h4>
+                  <p className="font-hanken text-xs text-neutral-600 mt-1">Celebrate completions with proof & reactions.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('signup')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 text-black font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all"
+                >
+                  Mint Free Passport ➔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('login')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-black hover:bg-neutral-800 active:translate-x-0.5 active:translate-y-0.5 text-white font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all"
+                >
+                  Sign In
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Sidebar: Squad Switcher + Category Filters */}
+            <aside className="hidden lg:block w-72 shrink-0">
+              <div className="sticky top-24">
+                <SquadSidebar
+                  squads={squads}
+                  activeSquadId={activeSquadId}
+                  onSelectSquad={(id) => {
+                    setActiveSquadId(id);
+                    if (activeTab === 'team') loadTeamGoals(id);
+                  }}
+                  selectedCategory={activeCategory === 'all' ? null : activeCategory}
+                  onSelectCategory={(cat) => setActiveCategory(cat || 'all')}
+                  onAddGroupClick={() => setIsCreateSquadOpen(true)}
+                />
+              </div>
+            </aside>
+
+            <div className="flex-1 space-y-8">
           {/* Toast */}
           {toastMessage && (
             <div className="p-4 bg-brand-yellow brutal-border-lg rounded-xl shadow-brutal flex items-center justify-between font-mono text-xs font-black animate-in slide-in-from-top-4">
@@ -860,7 +935,9 @@ function BucketList() {
             )
           )}
         </div>
-      </main>
+      </>
+    )}
+  </main>
 
       {/* Create Squad Modal */}
       <CreateSquadModal

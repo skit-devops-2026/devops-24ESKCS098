@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import Leaderboard from '../components/Leaderboard';
 import FeedCard from '../components/FeedCard';
 import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
@@ -105,6 +106,7 @@ const computeXpFromPosts = (posts) => {
 };
 
 function WallOfFame() {
+  const { isAuthenticated, currentUser, openAuthModal } = useAuth();
   const [viewMode, setViewMode] = useState('squad-feed'); // 'squad-feed' | 'trophy-room'
   const [feedItems, setFeedItems] = useState(() => {
     try {
@@ -358,7 +360,13 @@ function WallOfFame() {
           {/* "+ Post Achievement" Button */}
           <button
             type="button"
-            onClick={() => setIsCelebrateOpen(true)}
+            onClick={() => {
+              if (isAuthenticated) {
+                setIsCelebrateOpen(true);
+              } else {
+                openAuthModal('login');
+              }
+            }}
             className="px-5 py-2.5 bg-[#e4006c] text-white border-3 border-black rounded-xl font-space font-black text-xs uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer flex items-center gap-2"
           >
             <span>+</span>
@@ -424,10 +432,45 @@ function WallOfFame() {
       ) : (
         /* Personal Achievement Log (Section 4) */
         <div className="pt-8">
-          <PersonalTrophyRoom
-            userXp={userXp}
-            userPosts={feedItems}
-          />
+          {!isAuthenticated ? (
+            <div className="bg-brand-canvas brutal-border-lg rounded-2xl shadow-brutal-xl p-8 md:p-14 text-center max-w-2xl mx-auto space-y-6">
+              <div className="w-20 h-20 bg-brand-yellow brutal-border rounded-2xl shadow-brutal flex items-center justify-center mx-auto text-4xl -rotate-3">
+                🏆
+              </div>
+              <div className="space-y-2">
+                <span className="font-mono text-xs font-black uppercase tracking-wider bg-black text-brand-yellow px-3 py-1 rounded inline-block">
+                  TROPHY VAULT LOCKED ⚡
+                </span>
+                <h2 className="font-display font-black text-3xl md:text-4xl uppercase tracking-tight text-neutral-900">
+                  Your Personal Trophy Room
+                </h2>
+                <p className="font-hanken text-base text-neutral-700 max-w-md mx-auto">
+                  Sign in or create a passport to showcase your minted badges, calculate your lifetime adventure XP, and generate shareable achievement cards.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('signup')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 text-black font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all"
+                >
+                  Mint Free Passport ➔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('login')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-black hover:bg-neutral-800 active:translate-x-0.5 active:translate-y-0.5 text-white font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all"
+                >
+                  Sign In
+                </button>
+              </div>
+            </div>
+          ) : (
+            <PersonalTrophyRoom
+              userXp={userXp}
+              userPosts={feedItems}
+            />
+          )}
         </div>
       )}
 

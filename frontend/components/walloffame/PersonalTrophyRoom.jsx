@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 const PERSONAL_STATS = {
   totalQuests: 6,
@@ -221,14 +222,22 @@ const COMPLETED_ITEMS = [
 ];
 
 function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
+  const { currentUser } = useAuth();
   const [stats] = useState(PERSONAL_STATS);
   const [badges] = useState(ALL_BADGES);
   const [badgeFilter, setBadgeFilter] = useState('ALL'); // 'ALL' | 'UNLOCKED' | 'LOCKED'
   const [filterCategory, setFilterCategory] = useState('ALL');
 
-  // Convert newly created posts by Alex into authentic trophy conquest cards
+  // Convert newly created posts into authentic trophy conquest cards
   const newConquests = (userPosts || [])
-    .filter((p) => p && (p.isOwner || p.name?.includes('Alex Rivero') || (typeof p.id === 'number' && p.id > 100)))
+    .filter((p) =>
+      p && (
+        p.isOwner ||
+        (currentUser && (p.author_id === currentUser.id || p.authorId === currentUser.id || p.name?.includes(currentUser.name))) ||
+        p.name?.includes('Alex Rivero') ||
+        (typeof p.id === 'number' && p.id > 100)
+      )
+    )
     .filter((p) => !COMPLETED_ITEMS.some((c) => c.postId === p.id))
     .map((p) => ({
       id: `comp-${p.id}`,
@@ -288,23 +297,22 @@ function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 border-3 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white">
               <img
-                alt="Alex Avatar"
+                alt={currentUser?.name || 'User Avatar'}
                 className="w-full h-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6"
+                src={currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80'}
                 onError={(e) => {
                   e.currentTarget.onerror = null;
-                  e.currentTarget.src =
-                    'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6';
+                  e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentUser?.name || 'Explorer')}`;
                 }}
               />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-bricolage font-black text-2xl md:text-3xl uppercase tracking-tight text-black">
-                  Alex Rivero's Trophy Room
+                  {currentUser?.name || 'Adventurer'}'s Trophy Room
                 </h2>
                 <span className="px-2.5 py-1 bg-black text-white font-space font-black text-xs rounded uppercase">
-                  Level 8
+                  Level {Math.max(1, Math.floor((userXp || 250) / 300))}
                 </span>
               </div>
               <p className="font-hanken font-medium text-black/80 text-sm mt-1">

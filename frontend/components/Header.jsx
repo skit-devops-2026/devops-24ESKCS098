@@ -3,17 +3,14 @@ import { Link, useLocation } from 'react-router-dom';
 import NotificationsDropdown from './notifications/NotificationsDropdown';
 import AuthModal from './auth/AuthModal';
 import YearEndRecapModal from './recap/YearEndRecapModal';
+import { useAuth } from '../context/AuthContext';
 
 function Header() {
   const { pathname } = useLocation();
+  const { currentUser, isAuthenticated, logout, isAuthModalOpen, openAuthModal, closeAuthModal } = useAuth();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isRecapOpen, setIsRecapOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState({
-    name: 'Alex Rivero',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
-    unreadCount: 3,
-  });
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const navItems = [
     { to: '/', label: 'Dashboard', activeBg: 'bg-primary-container text-on-primary-container' },
@@ -108,72 +105,111 @@ function Header() {
           </span>
         </Link>
 
-        {/* Notifications Dropdown Anchor */}
-        <div className="relative">
+        {/* Notifications Dropdown Anchor (Authenticated only or generic) */}
+        {isAuthenticated && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              title="Notifications"
+              className={`w-10 h-10 border-2 border-black rounded-md flex items-center justify-center transition-all ${
+                isNotifOpen
+                  ? 'bg-brand-yellow shadow-none translate-x-[2px] translate-y-[2px]'
+                  : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-xl text-black">notifications</span>
+            </button>
+
+            <NotificationsDropdown
+              isOpen={isNotifOpen}
+              onClose={() => setIsNotifOpen(false)}
+              onNotificationClick={(notif) => {
+                console.log('Notification clicked:', notif);
+              }}
+            />
+          </div>
+        )}
+
+        {/* User Auth Section: Guest Sign In vs Authenticated Profile */}
+        {isAuthenticated && currentUser ? (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              title={`Logged in as ${currentUser.name}`}
+              className="flex items-center gap-2 pl-1 pr-2 py-1 border-2 border-black rounded-md bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer shrink-0"
+            >
+              <img
+                src={currentUser.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentUser.name)}`}
+                alt={currentUser.name}
+                className="w-7 h-7 rounded-full border border-black object-cover"
+              />
+              <span className="font-space font-black text-xs hidden sm:inline-block max-w-[90px] truncate">
+                {currentUser.name}
+              </span>
+              <span className="material-symbols-outlined text-sm">expand_more</span>
+            </button>
+
+            {isUserMenuOpen && (
+              <div
+                className="absolute right-0 mt-2 w-48 bg-white border-2 border-black rounded-lg shadow-brutal p-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+                onMouseLeave={() => setIsUserMenuOpen(false)}
+              >
+                <div className="px-2 py-1.5 border-b border-neutral-200 mb-1">
+                  <div className="font-space font-black text-xs text-neutral-900 truncate">
+                    {currentUser.name}
+                  </div>
+                  <div className="font-mono text-[10px] text-neutral-500 truncate">
+                    {currentUser.email}
+                  </div>
+                  <div className="mt-1 inline-block px-1.5 py-0.5 bg-brand-yellow font-mono text-[10px] font-black rounded border border-black">
+                    ⭐ {currentUser.xp || 0} XP
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    openAuthModal('login');
+                  }}
+                  className="w-full text-left px-2 py-1.5 font-space font-bold text-xs hover:bg-neutral-100 rounded flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-sm">badge</span>
+                  <span>View Passport</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    logout();
+                  }}
+                  className="w-full text-left px-2 py-1.5 font-space font-black text-xs text-rose-600 hover:bg-rose-50 rounded flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-sm">logout</span>
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
           <button
             type="button"
-            onClick={() => setIsNotifOpen(!isNotifOpen)}
-            title="Notifications"
-            className={`w-10 h-10 border-2 border-black rounded-md flex items-center justify-center transition-all ${
-              isNotifOpen
-                ? 'bg-brand-yellow shadow-none translate-x-[2px] translate-y-[2px]'
-                : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
-            }`}
+            onClick={() => openAuthModal('login')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-yellow hover:bg-[#ffe600] text-black border-2 border-black rounded-md font-space font-black uppercase text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined text-xl text-black">
-              {currentUser.unreadCount > 0 ? 'notifications_unread' : 'notifications'}
-            </span>
+            <span className="material-symbols-outlined text-base">login</span>
+            <span>Sign In / Join</span>
           </button>
-
-          {currentUser.unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-brand-pink text-white border-2 border-black rounded-full font-mono text-[10px] font-black flex items-center justify-center pointer-events-none animate-pulse">
-              {currentUser.unreadCount}
-            </span>
-          )}
-
-          {/* Notifications Dropdown Panel */}
-          <NotificationsDropdown
-            isOpen={isNotifOpen}
-            onClose={() => setIsNotifOpen(false)}
-            onNotificationClick={(notif) => {
-              console.log('Notification clicked:', notif);
-            }}
-          />
-        </div>
-
-        {/* User Avatar Button (Triggers AuthModal) */}
-        <button
-          type="button"
-          onClick={() => setIsAuthOpen(true)}
-          title={`Signed in as ${currentUser.name} (Click for Passport/Auth)`}
-          className="w-10 h-10 border-2 border-black rounded-md overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all relative group shrink-0"
-        >
-          <img
-            src={currentUser.avatar}
-            alt={currentUser.name}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-brand-yellow/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <span className="material-symbols-outlined text-xs text-black font-black">edit</span>
-          </div>
-        </button>
+        )}
       </div>
 
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        initialTab="login"
-        onAuthSuccess={(user) => {
-          setCurrentUser((prev) => ({
-            ...prev,
-            name: user.name,
-            avatar: user.avatar,
-          }));
-        }}
-      />
+      {/* Global Auth Modal */}
+      <AuthModal />
 
-      {/* 2026 Year End Recap Modal (Step 12 / Item 12) */}
+      {/* 2026 Year End Recap Modal */}
       <YearEndRecapModal
         isOpen={isRecapOpen}
         onClose={() => setIsRecapOpen(false)}

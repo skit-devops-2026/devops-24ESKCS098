@@ -3,10 +3,12 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('lifequest_token') : null;
   const config = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   };
@@ -26,6 +28,25 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  // Auth
+  register: async ({ name, email, password, vibe }) => {
+    return request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password, vibe }),
+    });
+  },
+
+  login: async ({ email, password }) => {
+    return request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  getMe: async () => {
+    return request('/auth/me');
+  },
+
   // Feed
   getFeed: async (filter = 'all', page = 1) => {
     return request(`/posts?filter=${encodeURIComponent(filter)}&page=${page}`);
@@ -109,9 +130,13 @@ export const api = {
   uploadImage: async (file) => {
     const formData = new FormData();
     formData.append('image', file);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('lifequest_token') : null;
 
     const res = await fetch(`${API_BASE}/upload`, {
       method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: formData,
     });
     const data = await res.json().catch(() => ({}));
@@ -120,19 +145,13 @@ export const api = {
   },
 
   // ── BucketList ─────────────────────────────────────────────────────────────
-  //
-  // Auth note: In development, the backend accepts x-dev-user-id to simulate
-  // a logged-in user (default user id = 1, Alex Rivero).
-  // In production, swap _bucketlistHeaders() to return { Authorization: `Bearer ${token}` }.
-  //
-  // Status values sent to/from the API follow frontend convention:
-  //   'not-started' | 'in-progress' | 'completed'
-  // The backend maps these to/from MongoDB values automatically.
-  // Goal and Group IDs are MongoDB ObjectId strings when MongoDB is connected.
-
-  /** Dev-mode headers. Replace with JWT in production. */
-  _bucketlistHeaders(devUserId = 1) {
-    return { 'x-dev-user-id': String(devUserId) };
+  /** Return headers with JWT bearer token or fallback dev header */
+  _bucketlistHeaders(devUserId) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('lifequest_token') : null;
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+    return devUserId ? { 'x-dev-user-id': String(devUserId) } : {};
   },
 
   // ── Personal Goals ──────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ function getPeriodStartDate(period) {
 // GET /api/leaderboard - Top rankings + Current user rank
 async function getLeaderboard(req, res, next) {
   try {
-    const userId = req.user.id;
+    const userId = req.user ? req.user.id : null;
     const period = req.query.period || 'all-time';
     const groupId = req.query.groupId ? parseInt(req.query.groupId, 10) : null;
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
@@ -21,8 +21,10 @@ async function getLeaderboard(req, res, next) {
     if (isMongoConnected()) {
       const periodStart = getPeriodStartDate(period);
 
-      // Find user's squads
-      const userGroups = await Group.find({ 'members.user_id': userId }).lean();
+      // Find user's squads or default squads for guests
+      const userGroups = userId
+        ? await Group.find({ 'members.user_id': userId }).lean()
+        : await Group.find({}).lean();
       let targetGroupIds = userGroups.map((g) => g.id);
       if (groupId) {
         targetGroupIds = targetGroupIds.filter((id) => id === groupId);
@@ -159,21 +161,19 @@ async function getLeaderboard(req, res, next) {
       }
 
       const topRankings = allRankings.slice(0, limit);
-      const myRow = allRankings.find((r) => r.isCurrentUser) || {
-        rank: 2,
-        xp: 3910,
-        name: 'You',
-      };
+      const myRow = userId ? allRankings.find((r) => r.isCurrentUser) : null;
 
       return res.json({
         success: true,
         period,
         top: topRankings,
-        me: {
-          rank: myRow.rank,
-          xp: myRow.xp,
-          name: myRow.name,
-        },
+        me: myRow
+          ? {
+              rank: myRow.rank,
+              xp: myRow.xp,
+              name: myRow.name,
+            }
+          : null,
       });
     }
 
@@ -295,17 +295,19 @@ async function getLeaderboard(req, res, next) {
     }
 
     const top = ranked.slice(0, limit);
-    const myRow = ranked.find((r) => r.isCurrentUser) || { rank: 2, xp: baseScores[1].xp, name: 'Alex Rivero' };
+    const myRow = userId ? ranked.find((r) => r.isCurrentUser) : null;
 
     res.json({
       success: true,
       period,
       top,
-      me: {
-        rank: myRow.rank,
-        xp: myRow.xp,
-        name: myRow.name,
-      },
+      me: myRow
+        ? {
+            rank: myRow.rank,
+            xp: myRow.xp,
+            name: myRow.name,
+          }
+        : null,
     });
   } catch (err) {
     next(err);

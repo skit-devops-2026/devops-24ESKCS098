@@ -1,7 +1,19 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import SquadMembersWidget from '../components/squad/SquadMembersWidget';
+import { useAuth } from '../context/AuthContext';
 
 function Home() {
+  const { isAuthenticated, openAuthModal } = useAuth();
+  const navigate = useNavigate();
+
+  const handleJoinQuestClick = () => {
+    if (isAuthenticated) {
+      navigate('/bucket-list');
+    } else {
+      openAuthModal('signup');
+    }
+  };
+
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-24">
       {/* Hero Section */}
@@ -24,11 +36,15 @@ function Home() {
             on your soul.
           </p>
           <div className="flex flex-wrap items-center gap-6">
-            <button className="px-8 py-3 bg-[#e4006c] text-white font-space font-bold uppercase border-3 border-black rounded-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
+            <button
+              type="button"
+              onClick={handleJoinQuestClick}
+              className="px-8 py-3 bg-[#e4006c] text-white font-space font-bold uppercase border-3 border-black rounded-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer"
+            >
               Join a Quest
             </button>
-            <a
-              href="#"
+            <Link
+              to="/wall-of-fame"
               className="flex items-center gap-2 font-space font-bold uppercase text-black hover:text-[#e4006c] transition-colors group"
             >
               <div className="w-8 h-8 flex items-center justify-center border-2 border-black rounded-full group-hover:border-[#e4006c] transition-colors">
@@ -36,8 +52,8 @@ function Home() {
                   <path d="M4 4l12 6-12 6z" />
                 </svg>
               </div>
-              <span className="underline decoration-2 underline-offset-4">How it works</span>
-            </a>
+              <span className="underline decoration-2 underline-offset-4">Explore Wall of Fame</span>
+            </Link>
           </div>
         </div>
 

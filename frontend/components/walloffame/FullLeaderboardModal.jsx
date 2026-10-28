@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const FULL_RANKINGS = [
   {
@@ -80,6 +81,7 @@ const FULL_RANKINGS = [
 ];
 
 function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
+  const { currentUser, isAuthenticated } = useAuth();
   const [filterTab, setFilterTab] = useState('ALL_TIME');
   const [searchQuery, setSearchQuery] = useState('');
   const [liveRankings, setLiveRankings] = useState(null);
@@ -112,13 +114,21 @@ function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
   }, [isOpen, filterTab, searchQuery]);
 
   const currentRankings = (liveRankings || FULL_RANKINGS).map((item) => {
-    if (item.isCurrentUser || item.name.includes('Alex Rivero')) {
+    const isUser = Boolean(
+      isAuthenticated &&
+        (item.isCurrentUser || (currentUser && (item.id === currentUser.id || item.name?.toLowerCase() === currentUser.name?.toLowerCase())))
+    );
+    if (isUser) {
       return {
         ...item,
-        xp: userXp,
+        xp: currentUser?.xp || userXp,
+        isCurrentUser: true,
       };
     }
-    return item;
+    return {
+      ...item,
+      isCurrentUser: false,
+    };
   })
     .sort((a, b) => b.xp - a.xp)
     .map((item, idx) => ({

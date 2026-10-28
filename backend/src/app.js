@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const authRoutes = require('./routes/authRoutes');
 const postRoutes = require('./routes/postRoutes');
 const leaderboardRoutes = require('./routes/leaderboardRoutes');
 const trophyRoomRoutes = require('./routes/trophyRoomRoutes');
@@ -35,6 +36,7 @@ app.get('/health', (req, res) => res.json(healthResponse()));
 app.get('/api/health', (req, res) => res.json(healthResponse()));
 
 // Mount Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/trophy-room', trophyRoomRoutes);

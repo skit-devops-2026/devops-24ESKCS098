@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../context/AuthContext';
 
 const COMMENT_EMOJI_PALETTE = ['🔥', '❤️', '👏', '🎉', '⚡', '🚀', '⭐', '💪', '🙌', '💯', '👑', '🥳', '😎', '🏆', '🎯', '✨'];
 
@@ -37,6 +38,7 @@ const getReactionEmoji = (val) => (val ? REACTION_TYPE_TO_EMOJI[val] || val : ''
 const getReactionType = (val) => (val ? EMOJI_TO_REACTION_TYPE[val] || val : '');
 
 function FeedCard({ item, onShare, onFriendClick, onDelete }) {
+  const { currentUser, isAuthenticated, openAuthModal } = useAuth();
   const [likes, setLikes] = useState(item.likes || 0);
   const [hasLiked, setHasLiked] = useState(item.hasLiked || false);
   const [showComments, setShowComments] = useState(false);
@@ -121,6 +123,10 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
   // Toggle Like with MongoDB sync
   const handleToggleLike = async () => {
+    if (!isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
     const nextLiked = !hasLiked;
     setHasLiked(nextLiked);
     setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
@@ -137,6 +143,11 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
   // Add / Change Reaction with MongoDB sync
   const handleSelectReaction = async (emoji, type) => {
+    if (!isAuthenticated) {
+      setShowReactionPicker(false);
+      openAuthModal('login');
+      return;
+    }
     const selectedType = type || getReactionType(emoji) || 'fire';
     const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
     const currentUserType = getReactionType(userReaction);
@@ -193,15 +204,19 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   // Submit Comment with MongoDB sync
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
+    if (!isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
     const text = newComment.trim();
     if (!text) return;
 
     const tempId = Date.now();
     const tempComment = {
       id: tempId,
-      authorId: 1,
+      authorId: currentUser?.id || 1,
       isOwner: true,
-      name: 'You (Alex)',
+      name: currentUser ? `You (${currentUser.name})` : 'You',
       color: 'text-primary font-black',
       text,
       time: 'Just now',
@@ -420,8 +435,8 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
             </svg>
           </button>
 
-          {/* Delete Post Button */}
-          {onDelete && (
+          {/* Delete Post Button (Author only) */}
+          {onDelete && isAuthenticated && (item.isOwner || (currentUser && (item.author_id === currentUser.id || item.authorId === currentUser.id || item.name?.includes(currentUser.name)))) && (
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
