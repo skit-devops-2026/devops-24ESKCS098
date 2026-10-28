@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     avatar_url: { type: String, default: '' },
     bio: { type: String, default: '' },
     vibe: { type: String, default: 'TRAVEL' },
+    xp: { type: Number, default: 1950 },
     created_at: { type: Date, default: Date.now },
   },
   {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { api } from '../services/api';
 import { createPortal } from 'react-dom';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { useAuth } from '../context/AuthContext';
@@ -196,8 +197,8 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
     }, { prompt: 'Log in to react to this quest!' });
   };
 
-  // Submit Comment
-  const handleCommentSubmit = (e) => {
+  // Submit Comment with MongoDB sync
+  const handleCommentSubmit = async (e) => {
     e.preventDefault();
     const text = newComment.trim();
     if (!text) return;
@@ -224,9 +225,14 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
     }, { prompt: 'Log in or sign up to comment on this quest!' });
   };
 
-  // Delete Comment
-  const handleDeleteComment = (commentId) => {
+  // Delete Comment with MongoDB sync
+  const handleDeleteComment = async (commentId) => {
     setComments((prev) => prev.filter((c) => c.id !== commentId));
+    try {
+      await api.deleteComment(commentId);
+    } catch (err) {
+      console.warn('[FeedCard] Delete comment error:', err.message);
+    }
   };
 
 

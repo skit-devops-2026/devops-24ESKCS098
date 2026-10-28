@@ -6,7 +6,7 @@ const postSchema = new mongoose.Schema(
     type: { type: String, enum: ['solo', 'group'], default: 'solo' },
     item_id: { type: Number, default: null },
     author_id: { type: Number, required: true, index: true },
-    group_id: { type: Number, required: true, index: true },
+    group_id: { type: mongoose.Schema.Types.Mixed, default: 1, index: true },
     title: { type: String, required: true, trim: true },
     caption: { type: String, default: '' },
     badge_label: { type: String, default: 'Quest Conquered' },

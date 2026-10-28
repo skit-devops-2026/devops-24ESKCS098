@@ -83,4 +83,14 @@ Desktop.ini
 *.swo
 
 # 10. Local docs & notes
-# docs/ — NOT ignored: M6 requires deployment screenshots here
+# docs/ — NOT ignored: M6 requires deployment screenshots here
+
+# Security & Private Keys
+*.pem
+*.key
+*.cert
+*.crt
+serviceAccount*.json
+.npmrc
+*.bson
+dump/
