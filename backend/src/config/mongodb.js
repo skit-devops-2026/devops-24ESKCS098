@@ -23,6 +23,31 @@ let _connecting = false;
  * Safe to call multiple times — subsequent calls are no-ops if already connected.
  */
 async function connectMongo() {
+  if (mongoose.connection.readyState === 1) {
+    _connected = true;
+    return;
+  }
+
+  // If connection is already in progress, await it
+  if (mongoose.connection.readyState === 2) {
+    try {
+      await mongoose.connection.asPromise();
+      _connected = true;
+      return;
+    } catch (err) {
+      _connected = false;
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          `[MongoDB] Connection failed: ${err.message}\n` +
+          'Verify MONGODB_URI, network access, and IP whitelist on your MongoDB Atlas cluster.\n' +
+          'BucketList features will not work until a MongoDB connection is established.'
+        );
+      }
+      console.warn(`⚠️  [MongoDB] Connection failed (${err.message}) — using in-memory dev store.`);
+      return;
+    }
+  }
+
   if (_connected || _connecting) return;
   _connecting = true;
 
@@ -49,7 +74,7 @@ async function connectMongo() {
     });
     _connected = true;
     _connecting = false;
-    console.log('✅ [MongoDB] Connected successfully.');
+    console.log('✅ Connected to MongoDB database successfully.');
   } catch (err) {
     _connecting = false;
     if (process.env.NODE_ENV === 'production') {

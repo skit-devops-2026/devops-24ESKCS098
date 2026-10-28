@@ -23,7 +23,7 @@ async function upsertReaction(req, res, next) {
       await Reaction.findOneAndUpdate(
         { post_id: postId, user_id: userId },
         { type: normType, created_at: new Date() },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
       );
 
       const countsRaw = await Reaction.aggregate([
