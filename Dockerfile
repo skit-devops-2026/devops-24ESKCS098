@@ -1,6 +1,4 @@
-# ============================================
 # Stage 1 — Build the React/Vite frontend
-# ============================================
 FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
@@ -9,20 +7,18 @@ WORKDIR /app
 COPY package.json package-lock.json vite.config.js index.html ./
 COPY frontend/ ./frontend/
 
-RUN npm ci
+RUN npm install
 RUN npm run build
 
-# ============================================
-# Stage 2 — Run the Express backend + serve
-#            the built frontend
-# ============================================
+
+# Stage 2 — Run the Express backend + serve the built frontend
 FROM node:20-alpine AS production
 
 WORKDIR /app
 
 # Copy backend source and install its dependencies
 COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 COPY backend/ ./
 

@@ -14,21 +14,24 @@ const MONGODB_URI =
 
 let isMongoConnected = false;
 
-// Connect to MongoDB
-mongoose
-  .connect(MONGODB_URI, {
-    serverSelectionTimeoutMS: 3000,
-  })
-  .then(() => {
-    isMongoConnected = true;
-    console.log('✅ Connected to MongoDB database successfully.');
-  })
-  .catch((err) => {
-    isMongoConnected = false;
-    console.warn(`⚠️  MongoDB connection not established (${err.message}).`);
-    console.info('💡 Running with robust in-memory dev database store so all endpoints work immediately.');
-    console.info('👉 Set a valid MONGODB_URI in backend/.env to connect to your real MongoDB database or Atlas cluster.');
-  });
+// Connect to MongoDB if not already connecting or connected
+if (mongoose.connection.readyState === 0) {
+  mongoose
+    .connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 30000,
+    })
+    .then(() => {
+      isMongoConnected = true;
+      console.log('✅ Connected to MongoDB database successfully.');
+    })
+    .catch((err) => {
+      isMongoConnected = false;
+      console.warn(`⚠️  MongoDB connection not established (${err.message}).`);
+      console.info('💡 Running with robust in-memory dev database store so all endpoints work immediately.');
+      console.info('👉 Set a valid MONGODB_URI in backend/.env to connect to your real MongoDB database or Atlas cluster.');
+    });
+}
 
 mongoose.connection.on('error', (err) => {
   console.error('MongoDB connection error:', err.message);
@@ -38,19 +41,6 @@ mongoose.connection.on('error', (err) => {
 mongoose.connection.on('disconnected', () => {
   isMongoConnected = false;
 });
-
-// Legacy PostgreSQL pool fallback stub (for backward compatibility during team migration)
-let isPgConnected = false;
-const pool = {
-  query: async () => {
-    throw new Error('PostgreSQL pool is deprecated. Please migrate to Mongoose models.');
-  },
-  connect: async () => ({
-    query: async () => {},
-    release: () => {},
-  }),
-  on: () => {},
-};
 
 // In-Memory Dev Store Fallback
 const inMemoryStore = {
@@ -172,9 +162,6 @@ const inMemoryStore = {
 
 module.exports = {
   mongoose,
-  pool,
-  isMongoConnected: () => isMongoConnected,
-  isPgConnected: () => isPgConnected,
+  isMongoConnected: () => mongoose.connection.readyState === 1,
   inMemoryStore,
-  query: (text, params) => pool.query(text, params),
 };

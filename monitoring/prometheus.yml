@@ -1,26 +1,25 @@
-# ============================================
 # Prometheus Configuration — LifeQuest
-# ============================================
+
 # Scrape metrics from the backend API and any
 # exporters added alongside the application.
-# ============================================
+
 
 global:
   scrape_interval: 15s        # How often to pull metrics
   evaluation_interval: 15s    # How often to evaluate rules
   scrape_timeout: 10s         # Per-target timeout
 
-# ── Alertmanager (optional, add when ready) ──
+# Alertmanager (optional, add when ready)
 # alerting:
 #   alertmanagers:
 #     - static_configs:
 #         - targets: ["alertmanager:9093"]
 
-# ── Rule Files ───────────────────────────────
+# Rule Files
 # rule_files:
 #   - "alert_rules.yml"
 
-# ── Scrape Targets ───────────────────────────
+# Scrape Targets 
 scrape_configs:
   # Prometheus itself
   - job_name: "prometheus"

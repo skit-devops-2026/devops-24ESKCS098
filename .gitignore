@@ -50,7 +50,6 @@ tmp/
 *.tmp
 myArchive.txt
 wof.txt
-docs
 
 # 6. Database dumps & local files
 *.sqlite

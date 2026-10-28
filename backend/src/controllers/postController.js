@@ -377,7 +377,7 @@ async function updateVisibility(req, res, next) {
       const post = await Post.findOneAndUpdate(
         { id: postId, author_id: req.user.id },
         { visibility },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!post) {

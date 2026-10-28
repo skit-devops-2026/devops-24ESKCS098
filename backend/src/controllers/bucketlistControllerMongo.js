@@ -350,7 +350,7 @@ async function updatePersonalGoal(req, res, next) {
             deadline: dbDeadline,
           },
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
       if (!goal) return res.status(404).json({ success: false, message: 'Goal not found.' });
       return res.json({ success: true, goal: mapGoalToFrontend(goal) });
@@ -399,7 +399,7 @@ async function updateGoalStatus(req, res, next) {
       const goal = await Goal.findOneAndUpdate(
         { _id: id, ownerId: userId },
         { $set: updateData },
-        { new: true }
+        { returnDocument: 'after' }
       );
       if (!goal) return res.status(404).json({ success: false, message: 'Goal not found.' });
       return res.json({ success: true, goal: mapGoalToFrontend(goal) });
@@ -905,7 +905,7 @@ async function updateTeamGoal(req, res, next) {
             category: dbCategory, difficulty: dbDifficulty, priority: dbPriority, deadline: dbDeadline,
           },
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
       if (!goal) {
         return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
@@ -968,7 +968,7 @@ async function updateTeamGoalStatus(req, res, next) {
       await Contribution.findOneAndUpdate(
         { goalId: id, userId },
         { $set: contribUpdate },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
 
       // Recalculate overall goal progress from all contributions
@@ -987,7 +987,7 @@ async function updateTeamGoalStatus(req, res, next) {
       const goal = await Goal.findOneAndUpdate(
         { _id: id, groupId: squadId },
         { $set: updateData },
-        { new: true }
+        { returnDocument: 'after' }
       );
       if (!goal) return res.status(404).json({ success: false, message: 'Goal not found.' });
 
@@ -1084,7 +1084,7 @@ async function updateMemberContribution(req, res, next) {
       const contrib = await Contribution.findOneAndUpdate(
         { goalId: id, userId },
         { $set: { goalId: id, groupId: squadId, userId, progress: dbProgress, note: note || '', updatedAt: new Date() } },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
 
       // Recalculate overall goal progress
@@ -1098,7 +1098,7 @@ async function updateMemberContribution(req, res, next) {
       const goal = await Goal.findByIdAndUpdate(
         id,
         { $set: { progress: overallProgress } },
-        { new: true }
+        { returnDocument: 'after' }
       );
       if (!goal) return res.status(404).json({ success: false, message: 'Goal not found.' });
 
