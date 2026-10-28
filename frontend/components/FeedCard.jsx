@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { createPortal } from 'react-dom';
-import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
+
+const COMMENT_EMOJI_PALETTE = ['🔥', '❤️', '👏', '🎉', '⚡', '🚀', '⭐', '💪', '🙌', '💯', '👑', '🥳', '😎', '🏆', '🎯', '✨'];
 
 const REACTION_OPTIONS = [
   { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100', type: 'fire' },
@@ -580,20 +581,23 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
                   </button>
                 </div>
 
-                {/* Emoji Picker Body */}
-                <EmojiPicker
-                  onEmojiClick={(emojiData) => handleAddEmoji(emojiData.emoji)}
-                  autoFocusSearch={false}
-                  theme={Theme.LIGHT}
-                  emojiStyle={EmojiStyle.APPLE}
-                  searchPlaceHolder="Search emojis (smile, dog, fire...)"
-                  width="100%"
-                  height={400}
-                  lazyLoadEmojis={true}
-                  previewConfig={{
-                    showPreview: true,
-                  }}
-                />
+                {/* Quick Emoji Palette */}
+                <div className="p-3 grid grid-cols-8 gap-2 bg-[#FFFDF5]">
+                  {COMMENT_EMOJI_PALETTE.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        handleAddEmoji(emoji);
+                        setShowEmojiPicker(false);
+                      }}
+                      className="w-8 h-8 flex items-center justify-center text-lg bg-white hover:bg-brand-yellow border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] active:scale-95 transition-all cursor-pointer"
+                      title={emoji}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </form>

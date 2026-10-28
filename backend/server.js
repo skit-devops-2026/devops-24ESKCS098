@@ -2,7 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 require('dotenv').config();
 const app = require('./src/app');
-const { connectMongo, isMongoConnected } = require('./src/config/mongodb');
+const { connectMongo, isMongoConnected } = require('./src/config/db');
 
 const PORT = process.env.PORT || 5000;
 

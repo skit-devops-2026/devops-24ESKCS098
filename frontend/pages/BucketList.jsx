@@ -26,7 +26,7 @@ import SquadSidebar from '../components/sidebar/SquadSidebar';
 import GroupChallengeBanner from '../components/challenge/GroupChallengeBanner';
 import CreateSquadModal from '../components/squad/CreateSquadModal';
 import ProgressUpdateDrawer from '../components/bucketlist/ProgressUpdateDrawer';
-import QuestCompletionModal from '../components/celebration/QuestCompletionModal';
+import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
 import SquadMembersWidget from '../components/squad/SquadMembersWidget';
 
 import { STATUS_FILTERS } from '../components/bucketlist/constants';
@@ -883,7 +883,7 @@ function BucketList() {
       />
 
       {/* Quest Completion Celebration Modal */}
-      <QuestCompletionModal
+      <CelebrateQuestModal
         isOpen={Boolean(celebrateGoal)}
         goal={celebrateGoal}
         onClose={() => setCelebrateGoal(null)}

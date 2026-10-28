@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
-const ctrl = require('../controllers/bucketlistControllerMongo');
+const ctrl = require('../controllers/bucketlistController');
 
 // All bucketlist routes require authentication (JWT or dev fallback)
 router.use(authMiddleware);

@@ -66,38 +66,8 @@ GoalSchema.index({ groupId: 1, status: 1 });
 
 const Goal = mongoose.models.Goal || mongoose.model('Goal', GoalSchema);
 
-// ── Group Member (subdocument) ────────────────────────────────────────────────
-
-const MemberSchema = new Schema(
-  {
-    userId: { type: Number, required: true },
-    role: { type: String, enum: ['admin', 'member'], default: 'member' },
-    joinedAt: { type: Date, default: Date.now },
-  },
-  { _id: false }
-);
-
 // ── Group (Squad) ─────────────────────────────────────────────────────────────
-
-const GroupSchema = new Schema(
-  {
-    name: { type: String, required: true, trim: true, maxlength: 100 },
-    description: { type: String, default: '', trim: true, maxlength: 500 },
-    coverUrl: { type: String, default: null },
-    joinCode: { type: String, required: true, unique: true, index: true, uppercase: true },
-    isPrivate: { type: Boolean, default: false },
-    adminId: { type: Number, required: true },
-    members: { type: [MemberSchema], default: [] },
-  },
-  {
-    timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
-    collection: 'groups',
-  }
-);
-
-GroupSchema.index({ 'members.userId': 1 });
-
-const Group = mongoose.models.Group || mongoose.model('Group', GroupSchema);
+const Group = require('./Group');
 
 // ── Contribution (per-member progress on a team goal) ─────────────────────────
 
