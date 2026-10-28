@@ -114,7 +114,8 @@ async function getLeaderboard(req, res, next) {
       };
 
       let scores = Array.from(userScoresMap.values()).map((entry) => {
-        const base = BASELINE_XP[entry.id] || 1000;
+        const userObj = userMap.get(entry.id);
+        const base = (userObj && typeof userObj.xp === 'number') ? userObj.xp : (BASELINE_XP[entry.id] || 1000);
         return {
           ...entry,
           xp: Math.max(entry.xp, base),

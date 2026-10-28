@@ -286,6 +286,12 @@ async function createPost(req, res, next) {
         created_at: new Date(),
       });
 
+      let currentUser = await User.findOne({ id: userId });
+      if (currentUser && (currentUser.xp === undefined || currentUser.xp === null)) {
+        currentUser.xp = 1950;
+        await currentUser.save();
+      }
+
       const updatedUser = await User.findOneAndUpdate(
         { id: userId },
         { $inc: { xp: calculatedXp } },

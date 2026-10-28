@@ -92,7 +92,16 @@ function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
         const periodParam = filterTab === 'THIS_WEEK' ? 'weekly' : 'all-time';
         const res = await api.getLeaderboard({ period: periodParam, search: searchQuery });
         if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
-          setLiveRankings(res.top);
+          const seen = new Set();
+          const uniqueList = [];
+          for (const u of res.top) {
+            const key = u.name?.trim().toLowerCase();
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueList.push(u);
+            }
+          }
+          setLiveRankings(uniqueList);
         }
       } catch (err) {
         console.warn('[Leaderboard] API fetch fallback to local:', err.message);
