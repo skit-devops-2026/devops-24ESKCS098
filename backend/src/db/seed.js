@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
+const dns = require('dns');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 require('dotenv').config();
+
+// Fix Windows DNS SRV lookup for MongoDB Atlas
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {}
 
 const { User, Group, Item, Post, Comment, Reaction, Badge } = require('../models');
 
