@@ -1,12 +1,54 @@
 // Frontend API service for LifeQuest Wall of Fame
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+const TOKEN_KEY = 'lq_auth_token';
+const USER_KEY = 'lq_auth_user';
+
+export function getStoredToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthSession(token, user) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch (e) {
+    console.error('Failed to save auth session to localStorage', e);
+  }
+}
+
+export function clearAuthSession() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch (e) {
+    console.error('Failed to clear auth session from localStorage', e);
+  }
+}
+
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const token = getStoredToken();
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
   const config = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
       ...(options.headers || {}),
     },
   };
@@ -16,7 +58,21 @@ async function request(endpoint, options = {}) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      throw new Error(data.message || `Request failed with status ${res.status}`);
+      if (res.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {
+        clearAuthSession();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('lifequest:auth-required', {
+              detail: { message: data.message || 'Please log in to continue.' },
+            })
+          );
+        }
+      }
+
+      const err = new Error(data.message || `Request failed with status ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
     }
     return data;
   } catch (err) {
@@ -26,6 +82,30 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  // ── Authentication ──────────────────────────────────────────────────────────
+  signup: async (userData) => {
+    return request('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  },
+
+  login: async (credentials) => {
+    return request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+  },
+
+  getMe: async () => {
+    return request('/auth/me');
+  },
+
+  logout: async () => {
+    return request('/auth/logout', {
+      method: 'POST',
+    });
+  },
   // Feed
   getFeed: async (filter = 'all', page = 1) => {
     return request(`/posts?filter=${encodeURIComponent(filter)}&page=${page}`);
@@ -130,8 +210,12 @@ export const api = {
   // The backend maps these to/from MongoDB values automatically.
   // Goal and Group IDs are MongoDB ObjectId strings when MongoDB is connected.
 
-  /** Dev-mode headers. Replace with JWT in production. */
+  /** Auth headers: uses stored JWT Bearer token if present. */
   _bucketlistHeaders(devUserId = 1) {
+    const token = getStoredToken();
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
     return { 'x-dev-user-id': String(devUserId) };
   },
 

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
+import { getUserAvatar } from '../utils/avatar';
 
 const REACTION_OPTIONS = [
   { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100', type: 'fire' },
@@ -35,6 +38,7 @@ const getReactionEmoji = (val) => (val ? REACTION_TYPE_TO_EMOJI[val] || val : ''
 const getReactionType = (val) => (val ? EMOJI_TO_REACTION_TYPE[val] || val : '');
 
 function FeedCard({ item, onShare, onFriendClick, onDelete }) {
+  const { user, requireAuth } = useAuth();
   const [likes, setLikes] = useState(item.likes || 0);
   const [hasLiked, setHasLiked] = useState(item.hasLiked || false);
   const [showComments, setShowComments] = useState(false);
@@ -119,54 +123,77 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
   // Toggle Like
   const handleToggleLike = () => {
-    const nextLiked = !hasLiked;
-    setHasLiked(nextLiked);
-    setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+    requireAuth(async () => {
+      const nextLiked = !hasLiked;
+      setHasLiked(nextLiked);
+      setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+      try {
+        if (nextLiked) {
+          await api.upsertReaction(item.id, 'like');
+        } else {
+          await api.deleteReaction(item.id);
+        }
+      } catch (err) {
+        console.warn('Like reaction update error:', err);
+      }
+    }, { prompt: 'Log in to like this quest achievement!' });
   };
 
   // Add / Change Reaction
   const handleSelectReaction = (emoji, type) => {
-    const selectedType = type || getReactionType(emoji) || 'fire';
-    const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
-    const currentUserType = getReactionType(userReaction);
-    const currentUserEmoji = getReactionEmoji(userReaction);
-    const isDeselect =
-      userReaction === selectedType ||
-      userReaction === selectedEmoji ||
-      currentUserType === selectedType;
+    requireAuth(async () => {
+      const selectedType = type || getReactionType(emoji) || 'fire';
+      const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
+      const currentUserType = getReactionType(userReaction);
+      const currentUserEmoji = getReactionEmoji(userReaction);
+      const isDeselect =
+        userReaction === selectedType ||
+        userReaction === selectedEmoji ||
+        currentUserType === selectedType;
 
-    setReactionCounts((prev) => {
-      const next = { ...prev };
-      const targetKey =
-        next[selectedType] !== undefined
-          ? selectedType
-          : next[selectedEmoji] !== undefined
-          ? selectedEmoji
-          : selectedType;
+      setReactionCounts((prev) => {
+        const next = { ...prev };
+        const targetKey =
+          next[selectedType] !== undefined
+            ? selectedType
+            : next[selectedEmoji] !== undefined
+            ? selectedEmoji
+            : selectedType;
 
-      if (isDeselect) {
-        next[targetKey] = Math.max(0, (next[targetKey] || 1) - 1);
-        setUserReaction(null);
-      } else {
-        if (userReaction) {
-          const oldType = getReactionType(userReaction);
-          const oldEmoji = getReactionEmoji(userReaction);
-          const oldKey =
-            next[oldType] !== undefined
-              ? oldType
-              : next[oldEmoji] !== undefined
-              ? oldEmoji
-              : oldType;
-          if (next[oldKey] !== undefined) {
-            next[oldKey] = Math.max(0, next[oldKey] - 1);
+        if (isDeselect) {
+          next[targetKey] = Math.max(0, (next[targetKey] || 1) - 1);
+          setUserReaction(null);
+        } else {
+          if (userReaction) {
+            const oldType = getReactionType(userReaction);
+            const oldEmoji = getReactionEmoji(userReaction);
+            const oldKey =
+              next[oldType] !== undefined
+                ? oldType
+                : next[oldEmoji] !== undefined
+                ? oldEmoji
+                : oldType;
+            if (next[oldKey] !== undefined) {
+              next[oldKey] = Math.max(0, next[oldKey] - 1);
+            }
           }
+          next[targetKey] = (next[targetKey] || 0) + 1;
+          setUserReaction(selectedType);
         }
-        next[targetKey] = (next[targetKey] || 0) + 1;
-        setUserReaction(selectedType);
+        return next;
+      });
+      setShowReactionPicker(false);
+
+      try {
+        if (isDeselect) {
+          await api.deleteReaction(item.id);
+        } else {
+          await api.upsertReaction(item.id, selectedType);
+        }
+      } catch (err) {
+        console.warn('Reaction update error:', err);
       }
-      return next;
-    });
-    setShowReactionPicker(false);
+    }, { prompt: 'Log in to react to this quest!' });
   };
 
   // Submit Comment
@@ -175,18 +202,26 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
     const text = newComment.trim();
     if (!text) return;
 
-    const tempComment = {
-      id: Date.now(),
-      authorId: 1,
-      isOwner: true,
-      name: 'You (Alex)',
-      color: 'text-primary font-black',
-      text,
-      time: 'Just now',
-    };
+    requireAuth(async () => {
+      const tempComment = {
+        id: Date.now(),
+        authorId: user?.id || 1,
+        isOwner: true,
+        name: user?.name ? `${user.name} (You)` : 'You',
+        color: 'text-primary font-black',
+        text,
+        time: 'Just now',
+      };
 
-    setComments((prev) => [...prev, tempComment]);
-    setNewComment('');
+      setComments((prev) => [...prev, tempComment]);
+      setNewComment('');
+
+      try {
+        await api.addComment(item.id, text);
+      } catch (err) {
+        console.warn('Failed to persist comment to backend:', err);
+      }
+    }, { prompt: 'Log in or sign up to comment on this quest!' });
   };
 
   // Delete Comment
@@ -228,14 +263,7 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
           <img
             alt={item.name}
             className="w-full h-full object-cover"
-            src={
-              item.avatar ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`
-            }
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`;
-            }}
+            src={getUserAvatar(item.authorId || item.author_id, item.avatar, item.name)}
           />
         </div>
         <div className="flex-1 min-w-0">

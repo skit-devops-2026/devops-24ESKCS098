@@ -5,7 +5,7 @@ const { calculateXP } = require('../utils/xp');
 // GET /api/posts - Wall of Fame Feed
 async function getFeed(req, res, next) {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id || null;
     const filter = req.query.filter || 'all';
     const groupId = req.query.groupId ? parseInt(req.query.groupId, 10) : null;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -14,20 +14,30 @@ async function getFeed(req, res, next) {
 
     // MongoDB Mode
     if (isMongoConnected()) {
-      // Find groups user is a member of
-      const userGroups = await Group.find({ 'members.user_id': userId }).select('id').lean();
-      const userGroupIds = userGroups.map((g) => g.id);
+      let userGroupIds = [];
+      if (userId) {
+        const userGroups = await Group.find({
+          $or: [
+            { 'members.user_id': userId },
+            { 'members.userId': userId },
+            { adminId: userId },
+            { admin_id: userId },
+          ],
+        }).lean();
+        userGroupIds = userGroups.map((g) => g.id || String(g._id));
+      }
 
       const query = { visibility: 'shared' };
 
       if (groupId) {
         query.group_id = groupId;
       } else if (filter === 'my-groups') {
-        query.$or = [{ group_id: { $in: userGroupIds } }, { author_id: userId }];
-      } else {
-        // Shared feed: show posts from user's squads or authored by user or general squads
-        if (userGroupIds.length > 0) {
+        if (userId && userGroupIds.length > 0) {
           query.$or = [{ group_id: { $in: userGroupIds } }, { author_id: userId }];
+        } else if (userId) {
+          query.author_id = userId;
+        } else {
+          query.group_id = -1;
         }
       }
 
@@ -189,6 +199,7 @@ async function getFeed(req, res, next) {
 
       return {
         id: p.id,
+        title: p.title || p.badge_label || 'Quest Conquered',
         filter: isRecent ? 'this-week' : 'my-groups',
         badge: p.badge_label || 'Epic Milestone',
         name: author.name,
@@ -323,28 +334,36 @@ async function createPost(req, res, next) {
 // GET /api/posts/stats/weekly - Quests completed in last 7 days
 async function getWeeklyStats(req, res, next) {
   try {
-    const userId = req.user.id;
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     // MongoDB Mode
     if (isMongoConnected()) {
-      const userGroups = await Group.find({ 'members.user_id': userId }).select('id').lean();
-      const groupIds = userGroups.map((g) => g.id);
-      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
       const count = await Post.countDocuments({
         completed_at: { $gte: oneWeekAgo },
-        group_id: { $in: groupIds },
+        visibility: 'shared',
       });
+      const activeSquads = await Group.countDocuments({});
 
-      return res.json({ success: true, count });
+      return res.json({
+        success: true,
+        count,
+        weeklyCompleted: count,
+        weeklyPhotos: count,
+        activeSquads,
+      });
     }
 
     // In-Memory Dev Store Fallback
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const count = inMemoryStore.posts.filter(
-      (p) => new Date(p.completed_at).getTime() >= oneWeekAgo
+      (p) => new Date(p.completed_at).getTime() >= oneWeekAgo.getTime() && p.visibility === 'shared'
     ).length;
-    res.json({ success: true, count });
+    res.json({
+      success: true,
+      count,
+      weeklyCompleted: count,
+      weeklyPhotos: count,
+      activeSquads: inMemoryStore.groups ? inMemoryStore.groups.length : 3,
+    });
   } catch (err) {
     next(err);
   }
