@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { api } from '../../services/api';
 import { createPortal } from 'react-dom';
 
 const FULL_RANKINGS = [
@@ -81,8 +82,27 @@ const FULL_RANKINGS = [
 function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
   const [filterTab, setFilterTab] = useState('ALL_TIME');
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveRankings, setLiveRankings] = useState(null);
 
-  const currentRankings = FULL_RANKINGS.map((item) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    async function fetchRankings() {
+      try {
+        const periodParam = filterTab === 'THIS_WEEK' ? 'weekly' : 'all-time';
+        const res = await api.getLeaderboard({ period: periodParam, search: searchQuery });
+        if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
+          setLiveRankings(res.top);
+        }
+      } catch (err) {
+        console.warn('[Leaderboard] API fetch fallback to local:', err.message);
+      }
+    }
+    fetchRankings();
+    return () => { isMounted = false; };
+  }, [isOpen, filterTab, searchQuery]);
+
+  const currentRankings = (liveRankings || FULL_RANKINGS).map((item) => {
     if (item.isCurrentUser || item.name.includes('Alex Rivero')) {
       return {
         ...item,

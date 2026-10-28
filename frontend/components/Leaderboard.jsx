@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
 
 const OTHER_PLAYERS = [
   {
@@ -28,7 +29,32 @@ const OTHER_PLAYERS = [
 ];
 
 function Leaderboard({ onViewFullRankings, userXp = 1950 }) {
-  const allParticipants = [
+  const [livePlayers, setLivePlayers] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchTopLeaderboard() {
+      try {
+        const res = await api.getLeaderboard({ period: 'all-time', limit: 10 });
+        if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
+          const mapped = res.top.map((u) => ({
+            id: u.userId || u.id || u.name,
+            name: u.name,
+            rawXp: (u.isCurrentUser || u.name.includes('Alex Rivero')) ? userXp : (u.xp || 0),
+            avatar: u.avatar || '',
+            isMe: Boolean(u.isCurrentUser || u.name.includes('Alex Rivero')),
+          }));
+          setLivePlayers(mapped);
+        }
+      } catch (err) {
+        console.warn('[Leaderboard] API fetch fallback to static:', err.message);
+      }
+    }
+    fetchTopLeaderboard();
+    return () => { isMounted = false; };
+  }, [userXp]);
+
+  const allParticipants = livePlayers || [
     ...OTHER_PLAYERS,
     {
       id: 'alex',

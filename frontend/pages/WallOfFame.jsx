@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { api } from '../services/api';
 import Leaderboard from '../components/Leaderboard';
 import FeedCard from '../components/FeedCard';
 import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
@@ -140,7 +141,36 @@ function WallOfFame() {
     return BASE_XP;
   });
 
-  const handlePostAchievement = (newItem) => {
+  // Live MongoDB feed sync
+  useEffect(() => {
+    let isMounted = true;
+    async function loadWallOfFameData() {
+      try {
+        const [feedRes, statsRes] = await Promise.allSettled([
+          api.getFeed(activeFilter),
+          api.getWeeklyStats(),
+        ]);
+
+        if (isMounted && feedRes.status === 'fulfilled' && feedRes.value?.success && Array.isArray(feedRes.value.posts)) {
+          if (feedRes.value.posts.length > 0) {
+            setFeedItems(feedRes.value.posts);
+          }
+        }
+        if (isMounted && statsRes.status === 'fulfilled' && statsRes.value?.success && typeof statsRes.value.count === 'number') {
+          setWeeklyQuestsCount(statsRes.value.count);
+        }
+      } catch (err) {
+        console.warn('[WallOfFame] Live backend fetch error, keeping local state:', err);
+      }
+    }
+
+    loadWallOfFameData();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeFilter]);
+
+  const handlePostAchievement = async (newItem) => {
     const isSolo = newItem.squadName?.toLowerCase().includes('solo') || newItem.isSolo;
     const addedXp = Number(newItem.xpEarned) || 250;
 
@@ -170,9 +200,32 @@ function WallOfFame() {
 
     setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${addedXp} XP)`);
     setTimeout(() => setToastMessage(null), 5000);
+
+    // Persist to MongoDB
+    try {
+      const res = await api.createPost({
+        title: newItem.title || newItem.badge || 'Conquered Quest',
+        caption: newItem.subtitle || newItem.caption || '',
+        badgeLabel: newItem.badge || 'Quest Conquered',
+        statBadge: newItem.statBadge || 'Verified ⚡',
+        imageUrls: newItem.image ? [newItem.image] : [],
+        groupId: isSolo ? 0 : 1,
+        xp: addedXp,
+        taggedUserIds: (newItem.taggedFriends || []).map((_, i) => i + 2),
+      });
+
+      if (res?.success && res.post) {
+        const fresh = await api.getFeed(activeFilter);
+        if (fresh?.success && Array.isArray(fresh.posts)) {
+          setFeedItems(fresh.posts);
+        }
+      }
+    } catch (err) {
+      console.warn('[WallOfFame] Failed to persist post to MongoDB:', err.message);
+    }
   };
 
-  const handleDeletePost = (postId) => {
+  const handleDeletePost = async (postId) => {
     const target = feedItems.find((p) => p.id === postId);
     const subXp = Number(target?.xpEarned || target?.xp) || 250;
     const nextFeed = feedItems.filter((p) => p.id !== postId);
@@ -191,6 +244,13 @@ function WallOfFame() {
 
     setToastMessage(`🗑️ Post deleted successfully! (-${subXp} XP)`);
     setTimeout(() => setToastMessage(null), 4000);
+
+    // Delete from MongoDB backend
+    try {
+      await api.deletePost(postId);
+    } catch (err) {
+      console.warn('[WallOfFame] Failed to delete post on backend:', err.message);
+    }
   };
 
   const filteredItems = feedItems.filter((item) => {
