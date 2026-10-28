@@ -7,6 +7,7 @@ const trophyRoomRoutes = require('./routes/trophyRoomRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const bucketlistRoutes = require('./routes/bucketlistRoutes');
+const authRoutes = require('./routes/authRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -35,6 +36,7 @@ app.get('/health', (req, res) => res.json(healthResponse()));
 app.get('/api/health', (req, res) => res.json(healthResponse()));
 
 // Mount Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/trophy-room', trophyRoomRoutes);

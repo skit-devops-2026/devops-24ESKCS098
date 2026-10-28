@@ -1,91 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { getUserAvatar } from '../utils/avatar';
 
-const OTHER_PLAYERS = [
+const FALLBACK_PLAYERS = [
   {
-    id: 'elena',
+    id: 3,
     name: 'Elena Vance',
-    rawXp: 2250,
+    xp: 2250,
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA3HSnRMBfUiKLTTVz-r9NlkIjnrrTThFp0IbPVXpLlNPgMWEAE_AzPF_3q1gKLdZtX-L2sM4DUopi_V0Ad3Pp8ksOmvEFDvrrAc2i_1iWfI_k6mumBPHLcfeYS02rfVIKx20CG7tpGJns9Vvf-XqJZpJqOwTAZypQz_Kep1VB4T3TxHsRD6mThSxw9ril9D1rQH_471vxMCpyXu39zev5Rr7-s3esElO6fB82dRXi7s6TWbsLAAaY9',
   },
   {
-    id: 'priya',
+    id: 1,
+    name: 'Alex Rivero',
+    xp: 1950,
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
+  },
+  {
+    id: 2,
     name: 'Priya Sharma',
-    rawXp: 1800,
+    xp: 1800,
     avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
-  },
-  {
-    id: 'sarah',
-    name: 'Sarah Chen',
-    rawXp: 1550,
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&q=80',
-  },
-  {
-    id: 'marco',
-    name: 'Marco Polo',
-    rawXp: 1400,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80',
   },
 ];
 
 function Leaderboard({ onViewFullRankings, userXp = 1950 }) {
-  const [livePlayers, setLivePlayers] = useState(null);
+  const { user } = useAuth();
+  const [topQuesters, setTopQuesters] = useState([]);
+  const [myRankData, setMyRankData] = useState({ rank: 2, xp: userXp, name: 'You' });
 
   useEffect(() => {
     let isMounted = true;
-    async function fetchTopLeaderboard() {
+
+    async function fetchLeaderboard() {
       try {
-        const res = await api.getLeaderboard({ period: 'all-time', limit: 10 });
-        if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
-          const seen = new Set();
-          const uniqueList = [];
-          for (const u of res.top) {
-            const key = u.name?.trim().toLowerCase();
-            if (!seen.has(key)) {
-              seen.add(key);
-              uniqueList.push({
-                id: u.userId || u.id || u.name,
-                name: u.name,
-                rawXp: Boolean(u.isCurrentUser || u.name.includes('Alex Rivero')) ? userXp : (u.xp || 0),
-                avatar: u.avatar || '',
-                isMe: Boolean(u.isCurrentUser || u.name.includes('Alex Rivero')),
-              });
-            }
+        const data = await api.getLeaderboard({ period: 'all-time', limit: 5 });
+        if (isMounted && data.success) {
+          if (Array.isArray(data.top) && data.top.length > 0) {
+            setTopQuesters(data.top);
           }
-          setLivePlayers(uniqueList);
+          if (data.me) {
+            setMyRankData({
+              rank: data.me.rank || 2,
+              xp: data.me.xp || userXp,
+              name: data.me.name || (user?.name || 'You'),
+            });
+          }
         }
       } catch (err) {
-        console.warn('[Leaderboard] API fetch fallback to static:', err.message);
+        // Fallback to default players on failure
+        if (isMounted) {
+          setTopQuesters(FALLBACK_PLAYERS);
+        }
       }
     }
-    fetchTopLeaderboard();
-    return () => { isMounted = false; };
-  }, [userXp]);
 
-  const allParticipants = livePlayers || [
-    ...OTHER_PLAYERS,
-    {
-      id: 'alex',
-      name: 'Alex Rivero',
-      rawXp: userXp,
-      isMe: true,
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
-    },
-  ];
+    fetchLeaderboard();
 
-  const sorted = [...allParticipants].sort((a, b) => b.rawXp - a.rawXp);
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, userXp]);
 
-  const ranked = sorted.map((p, idx) => ({
-    ...p,
-    rank: idx + 1,
-    medal: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`,
+  const displayList = (topQuesters.length > 0 ? topQuesters : FALLBACK_PLAYERS).slice(0, 3);
+  const entries = displayList.map((entry, idx) => ({
+    ...entry,
+    rank: entry.rank || idx + 1,
+    medal: (entry.rank || idx + 1) === 1 ? '🥇' : (entry.rank || idx + 1) === 2 ? '🥈' : '🥉',
     bg: idx === 0 ? 'bg-[#ffed00]' : idx === 1 ? 'bg-gray-100' : 'bg-[#ffdad6]',
-    xp: `${p.rawXp.toLocaleString()} XP`,
+    xpFormatted: `${(entry.xp || 0).toLocaleString()} XP`,
+    avatar: getUserAvatar(entry, entry.name),
   }));
-
-  const entries = ranked.slice(0, 3);
-  const myPlayer = ranked.find((p) => p.isMe) || { rank: 1, xp: `${userXp.toLocaleString()} XP` };
-  const myRank = { rank: myPlayer.rank, xp: `${userXp.toLocaleString()} XP` };
 
   return (
     <div className="bg-white border-4 border-black rounded-xl p-6 flex flex-col gap-6 sticky top-24 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
@@ -125,7 +110,9 @@ function Leaderboard({ onViewFullRankings, userXp = 1950 }) {
               <h4 className="font-bricolage font-bold uppercase text-base leading-tight text-black truncate">
                 {entry.name}
               </h4>
-              <p className="text-xs font-space font-bold text-black/70 uppercase">{entry.xp}</p>
+              <p className="text-xs font-space font-bold text-black/70 uppercase">
+                {entry.xpFormatted || `${entry.xp} XP`}
+              </p>
             </div>
           </div>
         ))}
@@ -154,10 +141,12 @@ function Leaderboard({ onViewFullRankings, userXp = 1950 }) {
         </span>
         <div className="flex items-end justify-between relative z-10">
           <div className="flex items-center gap-4">
-            <span className="font-bricolage text-4xl italic font-black text-[#ffed00]">#{myRank.rank}</span>
+            <span className="font-bricolage text-4xl italic font-black text-[#ffed00]">#{myRankData.rank}</span>
             <div>
-              <p className="font-bricolage font-bold uppercase text-xl leading-none">You</p>
-              <p className="text-sm font-space font-bold mt-1">{myRank.xp}</p>
+              <p className="font-bricolage font-bold uppercase text-xl leading-none">{myRankData.name}</p>
+              <p className="text-sm font-space font-bold mt-1">
+                {typeof myRankData.xp === 'number' ? `${myRankData.xp.toLocaleString()} XP` : myRankData.xp}
+              </p>
             </div>
           </div>
           <div className="w-10 h-10 bg-white border-2 border-black rounded-full flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-1 transition-transform">

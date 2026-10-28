@@ -25,8 +25,8 @@ const groupSchema = new mongoose.Schema(
     coverUrl: { type: String, default: null },
     join_code: { type: String, uppercase: true, trim: true },
     joinCode: { type: String, uppercase: true, trim: true },
-    is_private: { type: Boolean, default: false },
-    isPrivate: { type: Boolean, default: false },
+    is_private: { type: Boolean, default: true },
+    isPrivate: { type: Boolean, default: true },
     admin_id: { type: Number },
     adminId: { type: Number },
     members: [memberSchema],
@@ -34,6 +34,7 @@ const groupSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    collection: 'groups',
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
@@ -47,6 +48,7 @@ groupSchema.pre('validate', function () {
   if (this.coverUrl && !this.cover_url) this.cover_url = this.coverUrl;
   if (this.cover_url && !this.coverUrl) this.coverUrl = this.cover_url;
   if (this.isPrivate !== undefined && this.is_private === undefined) this.is_private = this.isPrivate;
+  if (this.is_private !== undefined && this.isPrivate === undefined) this.isPrivate = this.is_private;
   if (!this.id && this._id) this.id = this._id.toString();
 });
 

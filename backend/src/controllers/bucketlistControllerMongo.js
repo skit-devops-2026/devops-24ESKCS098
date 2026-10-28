@@ -26,6 +26,7 @@
 const mongoose = require('mongoose');
 const { isMongoConnected } = require('../config/mongodb');
 const { Goal, Group, Contribution } = require('../models/bucketlistModels');
+const User = require('../models/User');
 
 // ── Value maps ────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,33 @@ const ALLOWED_STATUSES_FRONTEND = new Set(['not-started', 'in-progress', 'comple
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function isUserGroupMember(group, userId) {
+  if (!group || !group.members) return false;
+  return group.members.some((m) => String(m.userId ?? m.user_id) === String(userId));
+}
+
+function isUserGroupAdmin(group, userId) {
+  if (!group) return false;
+  if (String(group.adminId ?? group.admin_id) === String(userId)) return true;
+  if (!group.members) return false;
+  return group.members.some(
+    (m) => String(m.userId ?? m.user_id) === String(userId) && m.role === 'admin'
+  );
+}
+
+async function findGroupByIdOrKey(squadId) {
+  if (!squadId) return null;
+  if (mongoose.Types.ObjectId.isValid(squadId)) {
+    const g = await Group.findById(squadId);
+    if (g) return g;
+  }
+  const numId = Number(squadId);
+  const query = !isNaN(numId)
+    ? { $or: [{ id: numId }, { id: String(numId) }, { _id: squadId }] }
+    : { $or: [{ id: squadId }, { _id: squadId }] };
+  return await Group.findOne(query);
+}
+
 function mapGoalToFrontend(doc) {
   const obj = typeof doc.toObject === 'function' ? doc.toObject() : doc;
   return {
@@ -85,15 +113,17 @@ function mapGoalToFrontend(doc) {
 
 function mapGroupToFrontend(doc, userId) {
   const obj = typeof doc.toObject === 'function' ? doc.toObject() : doc;
-  const membership = (obj.members || []).find((m) => m.userId === userId);
+  const membership = (obj.members || []).find((m) => String(m.userId ?? m.user_id) === String(userId));
   const totalMembers = (obj.members || []).length;
+  const code = obj.joinCode || obj.join_code || '';
   return {
     id: obj._id ? obj._id.toString() : String(obj.id),
     name: obj.name,
     description: obj.description || '',
-    cover_url: obj.coverUrl || null,
-    join_code: obj.joinCode,
-    is_private: obj.isPrivate,
+    cover_url: obj.coverUrl || obj.cover_url || null,
+    join_code: code,
+    joinCode: code,
+    is_private: Boolean(obj.isPrivate ?? obj.is_private),
     user_role: membership ? membership.role : 'member',
     members: totalMembers,
     active_quests: obj.active_quests || 0,
@@ -186,12 +216,13 @@ function requireMongo(res) {
 // ── Overall Stats ─────────────────────────────────────────────────────────────
 
 async function getBucketlistStats(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id;
 
   if (isMongoConnected()) {
     try {
+      const matchCriteria = userId ? { ownerId: userId, groupId: null } : { groupId: null };
       const results = await Goal.aggregate([
-        { $match: { ownerId: userId, groupId: null } },
+        { $match: matchCriteria },
         {
           $group: {
             _id: null,
@@ -211,7 +242,9 @@ async function getBucketlistStats(req, res, next) {
   }
 
   // Dev in-memory fallback
-  const items = _inMemGoals.filter((g) => g.ownerId === userId && g.groupId == null);
+  const items = userId
+    ? _inMemGoals.filter((g) => g.ownerId === userId && g.groupId == null)
+    : _inMemGoals.filter((g) => g.groupId == null);
   const total = items.length;
   const completed = items.filter((g) => g.status === 'completed').length;
   const inProgress = items.filter((g) => g.status === 'in_progress').length;
@@ -446,20 +479,51 @@ async function getSquads(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      const groups = await Group.find({ 'members.userId': userId });
+      const numUserId = Number(userId);
+      const orConditions = [
+        { 'members.userId': userId },
+        { 'members.user_id': userId },
+        { adminId: userId },
+        { admin_id: userId },
+      ];
+      if (!isNaN(numUserId)) {
+        orConditions.push(
+          { 'members.userId': numUserId },
+          { 'members.user_id': numUserId },
+          { adminId: numUserId },
+          { admin_id: numUserId }
+        );
+      }
+      const groups = await Group.find({ $or: orConditions });
 
       // Get active quest counts per group
-      const groupIds = groups.map((g) => g._id);
+      const groupKeySets = groups.flatMap((g) => [
+        String(g._id),
+        ...(g.id !== undefined && g.id !== null ? [g.id, String(g.id)] : []),
+      ]);
+
       const questCounts = await Goal.aggregate([
-        { $match: { groupId: { $in: groupIds.map(String) }, status: { $in: ['not_started', 'in_progress'] } } },
+        {
+          $match: {
+            groupId: { $in: groupKeySets },
+            status: { $in: ['not_started', 'in_progress'] },
+          },
+        },
         { $group: { _id: '$groupId', count: { $sum: 1 } } },
       ]);
-      const questMap = Object.fromEntries(questCounts.map((q) => [String(q._id), q.count]));
+      const questMap = Object.fromEntries(
+        questCounts.map((q) => [String(q._id), q.count])
+      );
 
-      const squads = groups.map((g) => ({
-        ...mapGroupToFrontend(g, userId),
-        active_quests: questMap[String(g._id)] || 0,
-      }));
+      const squads = groups.map((g) => {
+        const key = String(g._id);
+        const altKey = g.id !== undefined && g.id !== null ? String(g.id) : null;
+        const count = (questMap[key] || 0) + (altKey && questMap[altKey] ? questMap[altKey] : 0);
+        return {
+          ...mapGroupToFrontend(g, userId),
+          active_quests: count,
+        };
+      });
       return res.json({ success: true, squads });
     } catch (err) {
       return next(err);
@@ -467,14 +531,19 @@ async function getSquads(req, res, next) {
   }
 
   const squads = _inMemGroups
-    .filter((g) => (g.members || []).some((m) => m.userId === userId))
+    .filter(
+      (g) =>
+        (g.members || []).some((m) => String(m.userId ?? m.user_id) === String(userId)) ||
+        String(g.adminId ?? g.admin_id) === String(userId)
+    )
     .map((g) => mapGroupToFrontend(g, userId));
   return res.json({ success: true, squads });
 }
 
 async function createSquad(req, res, next) {
   const userId = req.user.id;
-  const { name, description } = req.body;
+  const { name, description, coverUrl, isPrivate } = req.body;
+  const requestedCode = (req.body.joinCode || req.body.join_code || '').trim().toUpperCase();
 
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, message: 'Squad name is required.' });
@@ -483,25 +552,60 @@ async function createSquad(req, res, next) {
     return res.status(400).json({ success: false, message: 'Name must be 100 chars or fewer.' });
   }
 
-  // Generate a unique join code (retry on collision)
+  const squadIsPrivate = isPrivate !== undefined ? Boolean(isPrivate) : true;
   let joinCode;
   if (isMongoConnected()) {
     try {
-      let attempts = 0;
-      do {
-        joinCode = generateJoinCode(name);
-        const exists = await Group.findOne({ joinCode });
-        if (!exists) break;
-        attempts++;
-      } while (attempts < 5);
+      if (requestedCode) {
+        const escaped = requestedCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const exists = await Group.findOne({
+          $or: [
+            { joinCode: requestedCode },
+            { join_code: requestedCode },
+            { joinCode: new RegExp(`^${escaped}$`, 'i') },
+            { join_code: new RegExp(`^${escaped}$`, 'i') },
+          ],
+        });
+        if (!exists) {
+          joinCode = requestedCode;
+        }
+      }
+
+      if (!joinCode) {
+        let attempts = 0;
+        do {
+          joinCode = generateJoinCode(name);
+          const exists = await Group.findOne({
+            $or: [{ joinCode }, { join_code: joinCode }],
+          });
+          if (!exists) break;
+          attempts++;
+        } while (attempts < 5);
+      }
+
+      const numUserId = Number(userId);
+      const finalUserId = !isNaN(numUserId) ? numUserId : userId;
 
       const group = await Group.create({
         name: name.trim(),
         description: (description || '').trim(),
+        coverUrl: coverUrl || null,
+        cover_url: coverUrl || null,
         joinCode,
-        isPrivate: false,
-        adminId: userId,
-        members: [{ userId, role: 'admin', joinedAt: new Date() }],
+        join_code: joinCode,
+        isPrivate: squadIsPrivate,
+        is_private: squadIsPrivate,
+        adminId: finalUserId,
+        admin_id: finalUserId,
+        members: [
+          {
+            userId: finalUserId,
+            user_id: finalUserId,
+            role: 'admin',
+            joinedAt: new Date(),
+            joined_at: new Date(),
+          },
+        ],
       });
 
       return res.status(201).json({ success: true, squad: mapGroupToFrontend(group, userId) });
@@ -510,12 +614,40 @@ async function createSquad(req, res, next) {
     }
   }
 
-  joinCode = generateJoinCode(name);
+  if (
+    requestedCode &&
+    !_inMemGroups.some((g) => (g.joinCode || g.join_code || '').toUpperCase() === requestedCode)
+  ) {
+    joinCode = requestedCode;
+  } else {
+    joinCode = generateJoinCode(name);
+  }
+
+  const numUserId = Number(userId);
+  const finalUserId = !isNaN(numUserId) ? numUserId : userId;
+
   const newGroup = {
-    _id: `g${_inMemIdCounter++}`, id: `g${_inMemIdCounter}`,
-    name: name.trim(), description: (description || '').trim(),
-    joinCode, isPrivate: false, adminId: userId,
-    members: [{ userId, role: 'admin', joinedAt: new Date() }],
+    _id: `g${_inMemIdCounter++}`,
+    id: `g${_inMemIdCounter}`,
+    name: name.trim(),
+    description: (description || '').trim(),
+    coverUrl: coverUrl || null,
+    cover_url: coverUrl || null,
+    joinCode,
+    join_code: joinCode,
+    isPrivate: squadIsPrivate,
+    is_private: squadIsPrivate,
+    adminId: finalUserId,
+    admin_id: finalUserId,
+    members: [
+      {
+        userId: finalUserId,
+        user_id: finalUserId,
+        role: 'admin',
+        joinedAt: new Date(),
+        joined_at: new Date(),
+      },
+    ],
     createdAt: new Date(),
   };
   _inMemGroups.push(newGroup);
@@ -525,20 +657,31 @@ async function createSquad(req, res, next) {
 async function joinSquad(req, res, next) {
   const userId = req.user.id;
   const { code, joinCode } = req.body;
-  const rawCode = ((code || joinCode || '')).trim().toUpperCase();
+  const rawCode = (code || joinCode || '').trim();
 
   if (!rawCode) {
     return res.status(400).json({ success: false, message: 'Join code is required.' });
   }
 
+  const upperCode = rawCode.toUpperCase();
+  const escaped = rawCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const codeRegex = new RegExp(`^${escaped}$`, 'i');
+
   if (isMongoConnected()) {
     try {
-      const group = await Group.findOne({ joinCode: rawCode });
+      const group = await Group.findOne({
+        $or: [
+          { joinCode: upperCode },
+          { join_code: upperCode },
+          { joinCode: codeRegex },
+          { join_code: codeRegex },
+        ],
+      });
       if (!group) {
-        return res.status(404).json({ success: false, message: 'Invalid squad join code.' });
+        return res.status(404).json({ success: false, message: 'Invalid squad join code. Please check and try again.' });
       }
 
-      const alreadyMember = group.members.some((m) => m.userId === userId);
+      const alreadyMember = isUserGroupMember(group, userId);
       if (alreadyMember) {
         return res.json({
           success: true,
@@ -547,7 +690,16 @@ async function joinSquad(req, res, next) {
         });
       }
 
-      group.members.push({ userId, role: 'member', joinedAt: new Date() });
+      const numUserId = Number(userId);
+      const finalUserId = !isNaN(numUserId) ? numUserId : userId;
+
+      group.members.push({
+        userId: finalUserId,
+        user_id: finalUserId,
+        role: 'member',
+        joinedAt: new Date(),
+        joined_at: new Date(),
+      });
       await group.save();
 
       return res.status(200).json({
@@ -560,17 +712,32 @@ async function joinSquad(req, res, next) {
     }
   }
 
-  const group = _inMemGroups.find((g) => (g.joinCode || '').toUpperCase() === rawCode);
-  if (!group) return res.status(404).json({ success: false, message: 'Invalid squad join code.' });
+  const group = _inMemGroups.find(
+    (g) => (g.joinCode || g.join_code || '').toUpperCase() === upperCode
+  );
+  if (!group) {
+    return res.status(404).json({ success: false, message: 'Invalid squad join code. Please check and try again.' });
+  }
 
-  const already = (group.members || []).some((m) => m.userId === userId);
+  const already = isUserGroupMember(group, userId);
   if (already) {
     return res.json({
-      success: true, message: 'Already a member of this squad.',
+      success: true,
+      message: 'Already a member of this squad.',
       squad: mapGroupToFrontend(group, userId),
     });
   }
-  group.members.push({ userId, role: 'member', joinedAt: new Date() });
+
+  const numUserId = Number(userId);
+  const finalUserId = !isNaN(numUserId) ? numUserId : userId;
+
+  group.members.push({
+    userId: finalUserId,
+    user_id: finalUserId,
+    role: 'member',
+    joinedAt: new Date(),
+    joined_at: new Date(),
+  });
   return res.status(200).json({
     success: true,
     message: `Successfully joined ${group.name}!`,
@@ -584,29 +751,33 @@ async function leaveSquad(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId)) {
-        return res.status(400).json({ success: false, message: 'Invalid squad ID.' });
-      }
-      const group = await Group.findById(squadId);
+      const group = await findGroupByIdOrKey(squadId);
       if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
 
-      const memberIdx = group.members.findIndex((m) => m.userId === userId);
+      const memberIdx = (group.members || []).findIndex(
+        (m) => (m.userId ?? m.user_id) === userId
+      );
       if (memberIdx === -1) {
         return res.status(404).json({ success: false, message: 'Not a member of this squad.' });
       }
 
-      // Prevent admin from leaving without transferring ownership
       const member = group.members[memberIdx];
       if (member.role === 'admin') {
-        const otherMembers = group.members.filter((m) => m.userId !== userId);
+        const otherMembers = (group.members || []).filter(
+          (m) => (m.userId ?? m.user_id) !== userId
+        );
         if (otherMembers.length > 0) {
-          // Transfer ownership to oldest other member
           const newAdmin = otherMembers[0];
-          const newAdminIdx = group.members.findIndex((m) => m.userId === newAdmin.userId);
-          group.members[newAdminIdx].role = 'admin';
-          group.adminId = newAdmin.userId;
+          const newAdminId = newAdmin.userId ?? newAdmin.user_id;
+          const newAdminIdx = group.members.findIndex(
+            (m) => (m.userId ?? m.user_id) === newAdminId
+          );
+          if (newAdminIdx !== -1) {
+            group.members[newAdminIdx].role = 'admin';
+          }
+          group.adminId = newAdminId;
+          group.admin_id = newAdminId;
         }
-        // If no other members, allow leaving (group will have no admin)
       }
 
       group.members.splice(memberIdx, 1);
@@ -617,42 +788,51 @@ async function leaveSquad(req, res, next) {
     }
   }
 
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const idx = (group.members || []).findIndex((m) => m.userId === userId);
+  const idx = (group.members || []).findIndex(
+    (m) => (m.userId ?? m.user_id) === userId
+  );
   if (idx === -1) return res.status(404).json({ success: false, message: 'Not a member.' });
   group.members.splice(idx, 1);
   return res.json({ success: true, message: 'Successfully left the squad.' });
 }
 
 async function getSquadMembers(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id;
   const { squadId } = req.params;
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId)) {
-        return res.status(400).json({ success: false, message: 'Invalid squad ID.' });
-      }
-      const group = await Group.findById(squadId);
+      const group = await findGroupByIdOrKey(squadId);
       if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
 
-      const isMember = group.members.some((m) => m.userId === userId);
-      if (!isMember) {
-        return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
+      const isPrivate = Boolean(group.isPrivate ?? group.is_private);
+      const isMember = isUserGroupMember(group, userId);
+
+      if (isPrivate && !isMember) {
+        return res.status(403).json({ success: false, message: 'This squad is private. Only members can view member details.' });
       }
 
-      const members = group.members.map((m) => ({
-        id: m.userId,
-        userId: m.userId,
-        role: m.role,
-        joinedAt: m.joinedAt,
-        // name/avatar would come from a users collection (not yet in MongoDB)
-        // For now we return the userId and role; the frontend can enrich with user data
-        name: m.userId === 1 ? 'Alex Rivero (You)' : `User ${m.userId}`,
-        avatar_url: null,
-        xp_contributed: 0,
-      }));
+      const memberIds = (group.members || []).map((m) => m.userId ?? m.user_id).filter((id) => id != null);
+      const users = await User.find({ id: { $in: memberIds } }).lean();
+      const userMap = new Map(users.map((u) => [u.id, u]));
+
+      const members = (group.members || []).map((m) => {
+        const mId = m.userId ?? m.user_id;
+        const u = userMap.get(mId);
+        return {
+          id: mId,
+          userId: mId,
+          role: m.role || 'member',
+          joinedAt: m.joinedAt || m.joined_at,
+          name: u ? u.name : (mId === 1 ? 'Alex Rivero (You)' : `User ${mId}`),
+          avatar_url: u ? u.avatar_url : null,
+          xp_contributed: 0,
+        };
+      });
 
       return res.json({ success: true, members });
     } catch (err) {
@@ -660,16 +840,29 @@ async function getSquadMembers(req, res, next) {
     }
   }
 
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
-  if (!isMember) return res.status(403).json({ success: false, message: 'Not a member.' });
 
-  const members = (group.members || []).map((m) => ({
-    id: m.userId, userId: m.userId, role: m.role, joinedAt: m.joinedAt,
-    name: m.userId === 1 ? 'Alex Rivero' : `User ${m.userId}`,
-    avatar_url: null, xp_contributed: 0,
-  }));
+  const isPrivate = Boolean(group.isPrivate ?? group.is_private);
+  const isMember = (group.members || []).some((m) => (m.userId ?? m.user_id) === userId);
+  if (isPrivate && !isMember) {
+    return res.status(403).json({ success: false, message: 'This squad is private. Only members can view member details.' });
+  }
+
+  const members = (group.members || []).map((m) => {
+    const mId = m.userId ?? m.user_id;
+    return {
+      id: mId,
+      userId: mId,
+      role: m.role || 'member',
+      joinedAt: m.joinedAt || m.joined_at,
+      name: mId === 1 ? 'Alex Rivero' : `User ${mId}`,
+      avatar_url: null,
+      xp_contributed: 0,
+    };
+  });
   return res.json({ success: true, members });
 }
 
@@ -680,20 +873,19 @@ async function updateSquad(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId)) {
-        return res.status(400).json({ success: false, message: 'Invalid squad ID.' });
-      }
-      const group = await Group.findById(squadId);
+      const group = await findGroupByIdOrKey(squadId);
       if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
 
-      const membership = group.members.find((m) => m.userId === userId);
-      if (!membership || membership.role !== 'admin') {
+      if (!isUserGroupAdmin(group, userId)) {
         return res.status(403).json({ success: false, message: 'Only squad admins can edit squad details.' });
       }
 
       if (name !== undefined) group.name = name.trim();
       if (description !== undefined) group.description = description;
-      if (coverUrl !== undefined) group.coverUrl = coverUrl;
+      if (coverUrl !== undefined) {
+        group.coverUrl = coverUrl;
+        group.cover_url = coverUrl;
+      }
       await group.save();
 
       return res.json({ success: true, squad: mapGroupToFrontend(group, userId) });
@@ -702,51 +894,54 @@ async function updateSquad(req, res, next) {
     }
   }
 
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const membership = (group.members || []).find((m) => m.userId === userId);
-  if (!membership || membership.role !== 'admin') {
+  if (!isUserGroupAdmin(group, userId)) {
     return res.status(403).json({ success: false, message: 'Only squad admins can edit squad details.' });
   }
   if (name !== undefined) group.name = name;
   if (description !== undefined) group.description = description;
-  if (coverUrl !== undefined) group.coverUrl = coverUrl;
+  if (coverUrl !== undefined) {
+    group.coverUrl = coverUrl;
+    group.cover_url = coverUrl;
+  }
   return res.json({ success: true, squad: mapGroupToFrontend(group, userId) });
 }
 
 // ── Team Goals ─────────────────────────────────────────────────────────────────
 
 async function getTeamGoals(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id;
   const { squadId } = req.params;
   const { status, category } = req.query;
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId)) {
-        return res.status(400).json({ success: false, message: 'Invalid squad ID.' });
-      }
-
-      // Verify membership
-      const group = await Group.findById(squadId);
+      const group = await findGroupByIdOrKey(squadId);
       if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-      const isMember = group.members.some((m) => m.userId === userId);
-      if (!isMember) {
-        return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
+
+      const isPrivate = Boolean(group.isPrivate ?? group.is_private);
+      const isMember = isUserGroupMember(group, userId);
+
+      if (isPrivate && !isMember) {
+        return res.status(403).json({ success: false, message: 'This squad is private. Only members can view team goals.' });
       }
 
-      const filter = { groupId: squadId };
+      const targetKeys = [String(group._id)];
+      if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+      const filter = { groupId: { $in: targetKeys } };
       if (status && STATUS_TO_DB[status]) filter.status = STATUS_TO_DB[status];
       if (category && ALLOWED_CATEGORIES.has(category.toUpperCase()))
         filter.category = category.toUpperCase();
 
       const goals = await Goal.find(filter).sort({ createdAt: -1 });
 
-      // Get contributions for each goal
       const goalIds = goals.map((g) => g._id);
       const contributions = await Contribution.find({ goalId: { $in: goalIds } });
 
-      // Build per-goal contribution maps
       const contribByGoal = {};
       for (const c of contributions) {
         const key = String(c.goalId);
@@ -754,19 +949,26 @@ async function getTeamGoals(req, res, next) {
         contribByGoal[key].push(c);
       }
 
-      const squadMembers = group.members.map((m) => ({
-        id: m.userId,
-        userId: m.userId,
-        role: m.role,
-        name: m.userId === 1 ? 'Alex Rivero' : `User ${m.userId}`,
-        avatar_url: null,
-      }));
+      const memberIds = (group.members || []).map((m) => m.userId ?? m.user_id).filter((id) => id != null);
+      const users = await User.find({ id: { $in: memberIds } }).lean();
+      const userMap = new Map(users.map((u) => [u.id, u]));
+
+      const squadMembers = (group.members || []).map((m) => {
+        const mId = m.userId ?? m.user_id;
+        const u = userMap.get(mId);
+        return {
+          id: mId,
+          userId: mId,
+          role: m.role || 'member',
+          name: u ? u.name : (mId === 1 ? 'Alex Rivero' : `User ${mId}`),
+          avatar_url: u ? u.avatar_url : null,
+        };
+      });
 
       const mapped = goals.map((g) => {
         const contribs = contribByGoal[String(g._id)] || [];
-        // Calculate overall progress from contributions (average if any, else goal progress)
         let overallProgress = g.progress;
-        if (contribs.length > 0) {
+        if (contribs.length > 0 && squadMembers.length > 0) {
           overallProgress = Math.round(
             contribs.reduce((sum, c) => sum + c.progress, 0) / squadMembers.length
           );
@@ -790,24 +992,45 @@ async function getTeamGoals(req, res, next) {
     }
   }
 
-  // In-memory fallback
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  // in-memory fallback
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
-  if (!isMember) return res.status(403).json({ success: false, message: 'Not a member.' });
 
-  let items = _inMemGoals.filter((g) => String(g.groupId) === String(squadId));
+  const isPrivate = Boolean(group.isPrivate ?? group.is_private);
+  const isMember = (group.members || []).some((m) => (m.userId ?? m.user_id) === userId);
+  if (isPrivate && !isMember) {
+    return res.status(403).json({ success: false, message: 'This squad is private. Only members can view team goals.' });
+  }
+
+  const targetKeys = [String(group._id)];
+  if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+  let items = _inMemGoals.filter((g) => targetKeys.includes(String(g.groupId)));
   if (status && STATUS_TO_DB[status]) items = items.filter((g) => g.status === STATUS_TO_DB[status]);
   if (category && ALLOWED_CATEGORIES.has(category.toUpperCase()))
     items = items.filter((g) => g.category === category.toUpperCase());
 
-  const squadMembers = (group.members || []).map((m) => ({
-    id: m.userId, userId: m.userId, role: m.role,
-    name: m.userId === 1 ? 'Alex Rivero' : `User ${m.userId}`, avatar_url: null,
-  }));
+  const squadMembers = (group.members || []).map((m) => {
+    const mId = m.userId ?? m.user_id;
+    return {
+      id: mId,
+      userId: mId,
+      role: m.role || 'member',
+      name: mId === 1 ? 'Alex Rivero' : `User ${mId}`,
+      avatar_url: null,
+    };
+  });
+
   return res.json({
     success: true,
-    goals: items.map((g) => ({ ...mapGoalToFrontend(g), members: squadMembers, contributions: [], overallProgress: g.progress })),
+    goals: items.map((g) => ({
+      ...mapGoalToFrontend(g),
+      members: squadMembers,
+      contributions: [],
+      overallProgress: g.progress,
+    })),
   });
 }
 
@@ -826,21 +1049,18 @@ async function createTeamGoal(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId)) {
-        return res.status(400).json({ success: false, message: 'Invalid squad ID.' });
+      const group = await findGroupByIdOrKey(squadId);
+      if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
+
+      if (!isUserGroupMember(group, userId)) {
+        return res.status(403).json({ success: false, message: 'You must be a member of this squad to create team goals.' });
       }
 
-      // Verify membership
-      const group = await Group.findById(squadId);
-      if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-      const isMember = group.members.some((m) => m.userId === userId);
-      if (!isMember) {
-        return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
-      }
+      const canonicalGroupId = String(group._id);
 
       const goal = await Goal.create({
         ownerId: userId,
-        groupId: squadId, // string ObjectId
+        groupId: canonicalGroupId,
         title: title.trim(),
         description: (description || '').trim(),
         category: dbCategory,
@@ -858,16 +1078,18 @@ async function createTeamGoal(req, res, next) {
     }
   }
 
-  // In-memory fallback
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
-  if (!isMember) return res.status(403).json({ success: false, message: 'Not a member.' });
+  if (!isUserGroupMember(group, userId)) {
+    return res.status(403).json({ success: false, message: 'You must be a member of this squad to create team goals.' });
+  }
 
   _inMemIdCounter += 1;
   const newGoal = {
     _id: String(_inMemIdCounter), id: String(_inMemIdCounter),
-    ownerId: userId, groupId: String(squadId),
+    ownerId: userId, groupId: String(group._id),
     title: title.trim(), description: (description || '').trim(),
     category: dbCategory, difficulty: dbDifficulty, visibility: 'shared',
     status: 'not_started', progress: 0, priority: dbPriority,
@@ -892,42 +1114,60 @@ async function updateTeamGoal(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId) || !mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: 'Invalid ID.' });
+      const group = await findGroupByIdOrKey(squadId);
+      if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
+
+      const targetKeys = [String(group._id)];
+      if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+      const goal = await Goal.findOne({
+        _id: mongoose.Types.ObjectId.isValid(id) ? id : null,
+        groupId: { $in: targetKeys },
+      });
+      if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
+      const isCreator = (goal.ownerId ?? goal.owner_id) === userId;
+      const isAdmin = isUserGroupAdmin(group, userId);
+      if (!isCreator && !isAdmin) {
+        return res.status(403).json({ success: false, message: 'Only the creator or squad admin can edit this goal.' });
       }
 
-      // Only creator can edit the goal (goal-level); all members can update status
-      const goal = await Goal.findOneAndUpdate(
-        { _id: id, groupId: squadId, ownerId: userId },
-        {
-          $set: {
-            title: title.trim(), description: (description || '').trim(),
-            category: dbCategory, difficulty: dbDifficulty, priority: dbPriority, deadline: dbDeadline,
-          },
-        },
-        { returnDocument: 'after' }
-      );
-      if (!goal) {
-        return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
-      }
+      goal.title = title.trim();
+      goal.description = (description || '').trim();
+      goal.category = dbCategory;
+      goal.difficulty = dbDifficulty;
+      goal.priority = dbPriority;
+      goal.deadline = dbDeadline;
+      await goal.save();
+
       return res.json({ success: true, goal: mapGoalToFrontend(goal) });
     } catch (err) {
       return next(err);
     }
   }
 
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
-  if (!isMember) return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
 
-  const idx = _inMemGoals.findIndex((g) => String(g._id) === String(id) && String(g.groupId) === String(squadId) && g.ownerId === userId);
-  if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
-  Object.assign(_inMemGoals[idx], {
+  const targetKeys = [String(group._id)];
+  if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+  const goal = _inMemGoals.find((g) => String(g._id) === String(id) && targetKeys.includes(String(g.groupId)));
+  if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
+  const isCreator = (goal.ownerId ?? goal.owner_id) === userId;
+  const isAdmin = isUserGroupAdmin(group, userId);
+  if (!isCreator && !isAdmin) {
+    return res.status(403).json({ success: false, message: 'Only the creator or squad admin can edit this goal.' });
+  }
+
+  Object.assign(goal, {
     title: title.trim(), description: (description || '').trim(),
     category: dbCategory, difficulty: dbDifficulty, priority: dbPriority, deadline: dbDeadline,
   });
-  return res.json({ success: true, goal: mapGoalToFrontend(_inMemGoals[idx]) });
+  return res.json({ success: true, goal: mapGoalToFrontend(goal) });
 }
 
 async function updateTeamGoalStatus(req, res, next) {
@@ -945,51 +1185,46 @@ async function updateTeamGoalStatus(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId) || !mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: 'Invalid ID.' });
-      }
-
-      // Verify membership
-      const group = await Group.findById(squadId);
+      const group = await findGroupByIdOrKey(squadId);
       if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-      const isMember = group.members.some((m) => m.userId === userId);
-      if (!isMember) {
+
+      if (!isUserGroupMember(group, userId)) {
         return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
       }
 
-      // Record this member's individual contribution
-      const contribUpdate = {
-        goalId: id,
-        groupId: squadId,
-        userId,
-        progress: dbProgress !== null ? dbProgress : 0,
-        updatedAt: new Date(),
-      };
+      const targetKeys = [String(group._id)];
+      if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+      const goal = await Goal.findOne({
+        _id: mongoose.Types.ObjectId.isValid(id) ? id : null,
+        groupId: { $in: targetKeys },
+      });
+      if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
       await Contribution.findOneAndUpdate(
-        { goalId: id, userId },
-        { $set: contribUpdate },
+        { goalId: goal._id, userId },
+        {
+          $set: {
+            goalId: goal._id,
+            groupId: String(group._id),
+            userId,
+            progress: dbProgress !== null ? dbProgress : 0,
+            updatedAt: new Date(),
+          },
+        },
         { upsert: true, returnDocument: 'after' }
       );
 
-      // Recalculate overall goal progress from all contributions
-      const allContribs = await Contribution.find({ goalId: id });
-      const memberCount = group.members.length;
+      const allContribs = await Contribution.find({ goalId: goal._id });
+      const memberCount = (group.members || []).length;
       const overallProgress = memberCount > 0
         ? Math.round(allContribs.reduce((s, c) => s + c.progress, 0) / memberCount)
         : dbProgress || 0;
 
-      const updateData = {
-        status: dbStatus,
-        progress: overallProgress,
-      };
-      if (dbStatus === 'completed') updateData.completedAt = new Date();
-
-      const goal = await Goal.findOneAndUpdate(
-        { _id: id, groupId: squadId },
-        { $set: updateData },
-        { returnDocument: 'after' }
-      );
-      if (!goal) return res.status(404).json({ success: false, message: 'Goal not found.' });
+      goal.status = dbStatus;
+      goal.progress = dbStatus === 'completed' ? 100 : overallProgress;
+      if (dbStatus === 'completed') goal.completedAt = new Date();
+      await goal.save();
 
       return res.json({ success: true, goal: mapGoalToFrontend(goal) });
     } catch (err) {
@@ -997,20 +1232,25 @@ async function updateTeamGoalStatus(req, res, next) {
     }
   }
 
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
-  if (!isMember) {
+  if (!isUserGroupMember(group, userId)) {
     return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
   }
 
-  const idx = _inMemGoals.findIndex((g) => String(g._id) === String(id) && String(g.groupId) === String(squadId));
-  if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
+  const targetKeys = [String(group._id)];
+  if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+  const goal = _inMemGoals.find((g) => String(g._id) === String(id) && targetKeys.includes(String(g.groupId)));
+  if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
   const updateData = { status: dbStatus };
   if (dbProgress !== null) updateData.progress = dbProgress;
   if (dbStatus === 'completed') updateData.completedAt = new Date();
-  Object.assign(_inMemGoals[idx], updateData);
-  return res.json({ success: true, goal: mapGoalToFrontend(_inMemGoals[idx]) });
+  Object.assign(goal, updateData);
+  return res.json({ success: true, goal: mapGoalToFrontend(goal) });
 }
 
 async function deleteTeamGoal(req, res, next) {
@@ -1019,43 +1259,56 @@ async function deleteTeamGoal(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId) || !mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: 'Invalid ID.' });
+      const group = await findGroupByIdOrKey(squadId);
+      if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
+
+      const targetKeys = [String(group._id)];
+      if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+      const goal = await Goal.findOne({
+        _id: mongoose.Types.ObjectId.isValid(id) ? id : null,
+        groupId: { $in: targetKeys },
+      });
+      if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
+      const isCreator = (goal.ownerId ?? goal.owner_id) === userId;
+      const isAdmin = isUserGroupAdmin(group, userId);
+      if (!isCreator && !isAdmin) {
+        return res.status(403).json({ success: false, message: 'Only the creator or squad admin can delete this goal.' });
       }
 
-      // Only creator can delete their team goal
-      const result = await Goal.deleteOne({ _id: id, groupId: squadId, ownerId: userId });
-      if (result.deletedCount === 0) {
-        return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
-      }
-      // Clean up contributions
-      await Contribution.deleteMany({ goalId: id });
+      await Goal.deleteOne({ _id: goal._id });
+      await Contribution.deleteMany({ goalId: goal._id });
       return res.json({ success: true, message: 'Team goal deleted.' });
     } catch (err) {
       return next(err);
     }
   }
 
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
-  if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
-  if (!isMember) return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
-
-  const idx = _inMemGoals.findIndex(
-    (g) => String(g._id) === String(id) && String(g.groupId) === String(squadId) && g.ownerId === userId
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
   );
-  if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
+  if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
+
+  const targetKeys = [String(group._id)];
+  if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+  const goal = _inMemGoals.find((g) => String(g._id) === String(id) && targetKeys.includes(String(g.groupId)));
+  if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
+  const isCreator = (goal.ownerId ?? goal.owner_id) === userId;
+  const isAdmin = isUserGroupAdmin(group, userId);
+  if (!isCreator && !isAdmin) {
+    return res.status(403).json({ success: false, message: 'Only the creator or squad admin can delete this goal.' });
+  }
+
+  const idx = _inMemGoals.indexOf(goal);
   _inMemGoals.splice(idx, 1);
   return res.json({ success: true, message: 'Team goal deleted.' });
 }
 
 // ── Member Contribution Update ─────────────────────────────────────────────────
 
-/**
- * PATCH /api/bucketlist/squads/:squadId/goals/:id/contribution
- * Update the current user's individual contribution/progress toward a team goal.
- * This does NOT overwrite other members' contributions.
- */
 async function updateMemberContribution(req, res, next) {
   const userId = req.user.id;
   const { squadId, id } = req.params;
@@ -1068,39 +1321,45 @@ async function updateMemberContribution(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId) || !mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: 'Invalid ID.' });
-      }
-
-      // Verify membership
-      const group = await Group.findById(squadId);
+      const group = await findGroupByIdOrKey(squadId);
       if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-      const isMember = group.members.some((m) => m.userId === userId);
-      if (!isMember) {
+
+      if (!isUserGroupMember(group, userId)) {
         return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
       }
 
-      // Upsert this user's contribution — cannot overwrite others
+      const targetKeys = [String(group._id)];
+      if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+      const goal = await Goal.findOne({
+        _id: mongoose.Types.ObjectId.isValid(id) ? id : null,
+        groupId: { $in: targetKeys },
+      });
+      if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
       const contrib = await Contribution.findOneAndUpdate(
-        { goalId: id, userId },
-        { $set: { goalId: id, groupId: squadId, userId, progress: dbProgress, note: note || '', updatedAt: new Date() } },
+        { goalId: goal._id, userId },
+        {
+          $set: {
+            goalId: goal._id,
+            groupId: String(group._id),
+            userId,
+            progress: dbProgress,
+            note: note || '',
+            updatedAt: new Date(),
+          },
+        },
         { upsert: true, returnDocument: 'after' }
       );
 
-      // Recalculate overall goal progress
-      const allContribs = await Contribution.find({ goalId: id });
-      const memberCount = group.members.length;
+      const allContribs = await Contribution.find({ goalId: goal._id });
+      const memberCount = (group.members || []).length;
       const overallProgress = memberCount > 0
         ? Math.round(allContribs.reduce((s, c) => s + c.progress, 0) / memberCount)
         : dbProgress;
 
-      // Update goal progress but NOT status (status is separate)
-      const goal = await Goal.findByIdAndUpdate(
-        id,
-        { $set: { progress: overallProgress } },
-        { returnDocument: 'after' }
-      );
-      if (!goal) return res.status(404).json({ success: false, message: 'Goal not found.' });
+      goal.progress = overallProgress;
+      await goal.save();
 
       return res.json({
         success: true,
@@ -1116,15 +1375,20 @@ async function updateMemberContribution(req, res, next) {
     }
   }
 
-  // In-memory fallback
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find(
+    (g) => String(g._id) === String(squadId) || String(g.id) === String(squadId)
+  );
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
-  if (!isMember) {
+  if (!isUserGroupMember(group, userId)) {
     return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
   }
-  const idx = _inMemGoals.findIndex((g) => String(g._id) === String(id) && String(g.groupId) === String(squadId));
-  if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
+
+  const targetKeys = [String(group._id)];
+  if (group.id !== undefined && group.id !== null) targetKeys.push(String(group.id));
+
+  const goal = _inMemGoals.find((g) => String(g._id) === String(id) && targetKeys.includes(String(g.groupId)));
+  if (!goal) return res.status(404).json({ success: false, message: 'Goal not found in this squad.' });
+
   return res.json({ success: true, message: 'Contribution saved (dev mode)', overallProgress: dbProgress });
 }
 

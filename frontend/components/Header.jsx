@@ -1,19 +1,36 @@
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationsDropdown from './notifications/NotificationsDropdown';
-import AuthModal from './auth/AuthModal';
 import YearEndRecapModal from './recap/YearEndRecapModal';
+import { useAuth } from '../context/AuthContext';
+import { getUserAvatar } from '../utils/avatar';
 
 function Header() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { user, isAuthenticated, logout, openAuthModal, requireAuth } = useAuth();
+
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isRecapOpen, setIsRecapOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState({
-    name: 'Alex Rivero',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
-    unreadCount: 3,
-  });
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  const userMenuRef = useRef(null);
+
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setIsUserMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const avatarUrl = getUserAvatar(user?.id, user?.avatar_url || user?.avatar, user?.name);
+  const displayName = user?.name || (isAuthenticated ? 'Adventurer' : 'Guest Quester');
+  const displayEmail = user?.email || (isAuthenticated ? '' : 'Browse public quests freely');
+  const displayVibe = user?.vibe || 'TRAVEL';
 
   const navItems = [
     { to: '/', label: 'Dashboard', activeBg: 'bg-primary-container text-on-primary-container' },
@@ -98,15 +115,20 @@ function Header() {
         </button>
 
         {/* Start Quest Button */}
-        <Link
-          to="/bucket-list"
-          className="relative inline-flex items-center justify-center px-4 md:px-6 py-2 overflow-hidden font-space font-bold uppercase text-xs md:text-sm tracking-tighter text-white bg-primary border-2 border-black rounded-md group shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all"
+        <button
+          type="button"
+          onClick={() => {
+            requireAuth(() => navigate('/bucket-list'), {
+              prompt: 'Log in or sign up to embark on your quests!',
+            });
+          }}
+          className="relative inline-flex items-center justify-center px-4 md:px-6 py-2 overflow-hidden font-space font-bold uppercase text-xs md:text-sm tracking-tighter text-white bg-primary border-2 border-black rounded-md group shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all cursor-pointer"
         >
           <span className="absolute w-0 h-0 transition-all duration-500 ease-out bg-[#ffed00] rounded-full group-hover:w-56 group-hover:h-56" />
           <span className="relative group-hover:text-black transition-colors duration-300">
             + Start Quest
           </span>
-        </Link>
+        </button>
 
         {/* Notifications Dropdown Anchor */}
         <div className="relative">
@@ -121,15 +143,9 @@ function Header() {
             }`}
           >
             <span className="material-symbols-outlined text-xl text-black">
-              {currentUser.unreadCount > 0 ? 'notifications_unread' : 'notifications'}
+              notifications
             </span>
           </button>
-
-          {currentUser.unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-brand-pink text-white border-2 border-black rounded-full font-mono text-[10px] font-black flex items-center justify-center pointer-events-none animate-pulse">
-              {currentUser.unreadCount}
-            </span>
-          )}
 
           {/* Notifications Dropdown Panel */}
           <NotificationsDropdown
@@ -141,37 +157,104 @@ function Header() {
           />
         </div>
 
-        {/* User Avatar Button (Triggers AuthModal) */}
-        <button
-          type="button"
-          onClick={() => setIsAuthOpen(true)}
-          title={`Signed in as ${currentUser.name} (Click for Passport/Auth)`}
-          className="w-10 h-10 border-2 border-black rounded-md overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all relative group shrink-0"
-        >
-          <img
-            src={currentUser.avatar}
-            alt={currentUser.name}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-brand-yellow/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <span className="material-symbols-outlined text-xs text-black font-black">edit</span>
-          </div>
-        </button>
-      </div>
+        {/* User Profile / Auth Button */}
+        <div className="relative" ref={userMenuRef}>
+          {isAuthenticated ? (
+            <button
+              type="button"
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              title={`Signed in as ${displayName} (Click for Passport/Profile)`}
+              className={`w-10 h-10 border-2 border-black rounded-md overflow-hidden transition-all relative group shrink-0 ${
+                isUserMenuOpen
+                  ? 'ring-2 ring-black shadow-none translate-x-[2px] translate-y-[2px]'
+                  : 'shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]'
+              }`}
+            >
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-brand-yellow/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="material-symbols-outlined text-xs text-black font-black">expand_more</span>
+              </div>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openAuthModal({ tab: 'login' })}
+                className="px-3 py-1.5 bg-black hover:bg-neutral-800 text-white font-mono text-xs font-black uppercase rounded-md brutal-border-sm shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all cursor-pointer"
+              >
+                Log In
+              </button>
+              <button
+                type="button"
+                onClick={() => openAuthModal({ tab: 'signup' })}
+                className="hidden sm:inline-flex px-3 py-1.5 bg-brand-pink hover:bg-[#ff2d75] text-white font-mono text-xs font-black uppercase rounded-md brutal-border-sm shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all cursor-pointer"
+              >
+                Join
+              </button>
+            </div>
+          )}
 
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        initialTab="login"
-        onAuthSuccess={(user) => {
-          setCurrentUser((prev) => ({
-            ...prev,
-            name: user.name,
-            avatar: user.avatar,
-          }));
-        }}
-      />
+          {/* User Profile Dropdown Menu */}
+          {isAuthenticated && isUserMenuOpen && (
+            <div className="absolute right-0 mt-3 w-64 bg-brand-canvas brutal-border rounded-xl shadow-brutal-lg z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              {/* User Bio Header */}
+              <div className="p-4 bg-brand-yellow border-b-2 border-black">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    className="w-12 h-12 rounded-lg brutal-border-sm object-cover bg-white"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display font-black text-sm text-neutral-900 truncate">
+                      {displayName}
+                    </p>
+                    <p className="font-mono text-[11px] text-neutral-700 truncate">
+                      {displayEmail}
+                    </p>
+                    <span className="inline-block mt-1 px-1.5 py-0.5 bg-black text-white font-mono text-[10px] font-black rounded uppercase">
+                      {displayVibe}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="p-2 space-y-1 bg-white">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    openAuthModal({ tab: 'signup', prompt: 'Mint an additional passport or switch quester profile' });
+                  }}
+                  className="w-full text-left px-3 py-2 font-mono text-xs font-bold text-neutral-800 hover:bg-neutral-100 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">switch_account</span>
+                  <span>Switch Account / Passport</span>
+                </button>
+
+                <div className="border-t border-dashed border-neutral-300 my-1" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    logout();
+                  }}
+                  className="w-full text-left px-3 py-2 font-mono text-xs font-black text-[#ba1a1a] hover:bg-[#ffdad6] rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">logout</span>
+                  <span>Log Out of Quest</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* 2026 Year End Recap Modal (Step 12 / Item 12) */}
       <YearEndRecapModal
@@ -183,4 +266,3 @@ function Header() {
 }
 
 export default Header;
-

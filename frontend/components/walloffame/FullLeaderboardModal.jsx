@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../services/api';
 import { createPortal } from 'react-dom';
+import { api } from '../../services/api';
+import { getUserAvatar } from '../../utils/avatar';
 
 const FULL_RANKINGS = [
   {
@@ -82,37 +83,41 @@ const FULL_RANKINGS = [
 function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
   const [filterTab, setFilterTab] = useState('ALL_TIME');
   const [searchQuery, setSearchQuery] = useState('');
-  const [liveRankings, setLiveRankings] = useState(null);
+  const [apiRankings, setApiRankings] = useState([]);
 
   useEffect(() => {
     if (!isOpen) return;
     let isMounted = true;
+
     async function fetchRankings() {
       try {
-        const periodParam = filterTab === 'THIS_WEEK' ? 'weekly' : 'all-time';
-        const res = await api.getLeaderboard({ period: periodParam, search: searchQuery });
-        if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
-          const seen = new Set();
-          const uniqueList = [];
-          for (const u of res.top) {
-            const key = u.name?.trim().toLowerCase();
-            if (!seen.has(key)) {
-              seen.add(key);
-              uniqueList.push(u);
-            }
-          }
-          setLiveRankings(uniqueList);
+        const periodMap = {
+          THIS_MONTH: 'monthly',
+          THIS_WEEK: 'weekly',
+          ALL_TIME: 'all-time',
+          STREAKS: 'all-time',
+        };
+        const period = periodMap[filterTab] || 'all-time';
+        const data = await api.getLeaderboard({ period, search: searchQuery, limit: 50 });
+        if (isMounted && data.success && Array.isArray(data.top) && data.top.length > 0) {
+          setApiRankings(data.top);
         }
       } catch (err) {
-        console.warn('[Leaderboard] API fetch fallback to local:', err.message);
+        // Fallback to local rankings on error
       }
     }
+
     fetchRankings();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, filterTab, searchQuery]);
 
-  const currentRankings = (liveRankings || FULL_RANKINGS).map((item) => {
-    if (item.isCurrentUser || item.name.includes('Alex Rivero')) {
+  const sourceRankings = apiRankings.length > 0 ? apiRankings : FULL_RANKINGS;
+
+  const currentRankings = sourceRankings.map((item) => {
+    if (item.isCurrentUser || item.name?.includes('Alex Rivero')) {
       return {
         ...item,
         xp: userXp,
@@ -123,8 +128,9 @@ function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
     .sort((a, b) => b.xp - a.xp)
     .map((item, idx) => ({
       ...item,
-      rank: idx + 1,
-      medal: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null,
+      rank: item.rank || idx + 1,
+      medal: (item.rank || idx + 1) === 1 ? '🥇' : (item.rank || idx + 1) === 2 ? '🥈' : (item.rank || idx + 1) === 3 ? '🥉' : null,
+      avatar: getUserAvatar(item, item.name),
     }));
 
   useEffect(() => {

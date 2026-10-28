@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { useState, useEffect, useCallback } from 'react';
 import Leaderboard from '../components/Leaderboard';
 import FeedCard from '../components/FeedCard';
 import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
 import FullLeaderboardModal from '../components/walloffame/FullLeaderboardModal';
 import PersonalTrophyRoom from '../components/walloffame/PersonalTrophyRoom';
 import ShareableCardModal from '../components/walloffame/ShareableCardModal';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
 
 const INITIAL_FEED_ITEMS = [
   {
@@ -93,173 +94,101 @@ const FILTERS = [
 ];
 
 const BASE_XP = 1950;
-const INITIAL_POST_IDS = new Set([1, 2, 3]);
-
-const computeXpFromPosts = (posts) => {
-  if (!Array.isArray(posts)) return BASE_XP;
-  const addedXp = posts
-    .filter((p) => p && (p.isOwner || p.author_id === 1 || p.name?.includes('Alex Rivero') || p.name?.includes('(You)')))
-    .filter((p) => p.id !== 1) // Post 1 is the initial demo post already counted in BASE_XP (1950)
-    .reduce((sum, p) => sum + (Number(p.xpEarned || p.xp || p.xp_earned) || 250), 0);
-  return BASE_XP + addedXp;
-};
 
 function WallOfFame() {
+  const { user, isAuthenticated, requireAuth } = useAuth();
   const [viewMode, setViewMode] = useState('squad-feed'); // 'squad-feed' | 'trophy-room'
-  const [feedItems, setFeedItems] = useState(() => {
-    try {
-      const saved = localStorage.getItem('lifequest_walloffame_posts_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_FEED_ITEMS;
-  });
-  const [weeklyQuestsCount, setWeeklyQuestsCount] = useState(() => {
-    try {
-      const saved = localStorage.getItem('lifequest_weekly_count_v1');
-      if (saved) return parseInt(saved, 10);
-    } catch {}
-    return 18;
-  });
+  const [feedItems, setFeedItems] = useState(INITIAL_FEED_ITEMS);
+  const [weeklyQuestsCount, setWeeklyQuestsCount] = useState(18);
   const [activeFilter, setActiveFilter] = useState('all');
   const [isCelebrateOpen, setIsCelebrateOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [shareItem, setShareItem] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
-  const [userXp, setUserXp] = useState(() => {
+  const [userXp, setUserXp] = useState(BASE_XP);
+  const [isLoadingFeed, setIsLoadingFeed] = useState(true);
+
+  const fetchFeed = useCallback(async (filterKey = activeFilter) => {
     try {
-      const saved = localStorage.getItem('lifequest_walloffame_posts_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return computeXpFromPosts(parsed);
-        }
-      }
-    } catch {}
-    return BASE_XP;
-  });
+      setIsLoadingFeed(true);
+      const [feedRes, weeklyRes] = await Promise.all([
+        api.getFeed(filterKey).catch(() => null),
+        api.getWeeklyStats().catch(() => null),
+      ]);
 
-  // Live MongoDB feed sync
-  useEffect(() => {
-    let isMounted = true;
-    async function loadWallOfFameData() {
-      try {
-        const [feedRes, statsRes] = await Promise.allSettled([
-          api.getFeed(activeFilter),
-          api.getWeeklyStats(),
-        ]);
-
-        if (isMounted && feedRes.status === 'fulfilled' && feedRes.value?.success && Array.isArray(feedRes.value.posts)) {
-          if (feedRes.value.posts.length > 0) {
-            setFeedItems(feedRes.value.posts);
-            const calculatedXp = computeXpFromPosts(feedRes.value.posts);
-            setUserXp(calculatedXp);
-          }
-        }
-        if (isMounted && statsRes.status === 'fulfilled' && statsRes.value?.success && typeof statsRes.value.count === 'number') {
-          setWeeklyQuestsCount(statsRes.value.count);
-        }
-      } catch (err) {
-        console.warn('[WallOfFame] Live backend fetch error, keeping local state:', err);
+      if (feedRes && feedRes.success && Array.isArray(feedRes.posts)) {
+        // Map backend posts to feed items with ownership
+        const currentUserId = user?.id;
+        const mapped = feedRes.posts.map((p) => ({
+          ...p,
+          isOwner: currentUserId ? p.authorId === currentUserId || p.author_id === currentUserId : false,
+        }));
+        setFeedItems(mapped.length > 0 ? mapped : INITIAL_FEED_ITEMS);
       }
+
+      if (weeklyRes && weeklyRes.success && typeof weeklyRes.count === 'number') {
+        setWeeklyQuestsCount(Math.max(weeklyRes.count, 1));
+      }
+    } catch (err) {
+      console.warn('Could not load live feed:', err.message);
+    } finally {
+      setIsLoadingFeed(false);
     }
+  }, [activeFilter, user?.id]);
 
-    loadWallOfFameData();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeFilter]);
+  useEffect(() => {
+    fetchFeed(activeFilter);
+  }, [fetchFeed, activeFilter]);
 
   const handlePostAchievement = async (newItem) => {
     const isSolo = newItem.squadName?.toLowerCase().includes('solo') || newItem.isSolo;
     const addedXp = Number(newItem.xpEarned) || 250;
 
-    const createdItem = {
-      ...newItem,
-      id: Date.now(),
-      name: 'Alex Rivero (You)',
-      isOwner: true,
-      squadName: isSolo ? 'Solo Quest 👤' : (newItem.squadName || 'Trip Squad'),
-      xpEarned: addedXp,
-      completionDate: 'Just now',
-    };
-
-    const nextFeed = [createdItem, ...feedItems];
-    const nextXp = computeXpFromPosts(nextFeed);
-    const nextWeekly = weeklyQuestsCount + 1;
-
-    setFeedItems(nextFeed);
-    setUserXp(nextXp);
-    setWeeklyQuestsCount(nextWeekly);
-
     try {
-      localStorage.setItem('lifequest_walloffame_posts_v2', JSON.stringify(nextFeed));
-      localStorage.setItem('lifequest_user_xp_v1', String(nextXp));
-      localStorage.setItem('lifequest_weekly_count_v1', String(nextWeekly));
-    } catch {}
-
-    setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${addedXp} XP)`);
-    setTimeout(() => setToastMessage(null), 5000);
-
-    // Persist to MongoDB
-    try {
-      const res = await api.createPost({
+      const payload = {
         title: newItem.title || newItem.badge || 'Conquered Quest',
-        caption: newItem.subtitle || newItem.caption || '',
+        caption: newItem.subtitle || `Conquered "${newItem.title}"!`,
         badgeLabel: newItem.badge || 'Quest Conquered',
         statBadge: newItem.statBadge || 'Verified ⚡',
-        imageUrls: newItem.image ? [newItem.image] : [],
-        groupId: isSolo ? 0 : 1,
+        proofImages: newItem.image ? [newItem.image] : [],
         xp: addedXp,
-        taggedUserIds: (newItem.taggedFriends || []).map((_, i) => i + 2),
-      });
+        category: newItem.category || 'ADVENTURE',
+        type: isSolo ? 'solo' : 'group',
+      };
 
-      if (res?.success && res.post) {
-        const fresh = await api.getFeed(activeFilter);
-        if (fresh?.success && Array.isArray(fresh.posts)) {
-          setFeedItems(fresh.posts);
-          const computed = computeXpFromPosts(fresh.posts);
-          setUserXp(computed);
-        }
-      }
+      await api.createPost(payload);
+      setToastMessage(`🎉 Achievement "${newItem.badge}" minted and posted to Wall of Fame! (+${addedXp} XP)`);
+      setTimeout(() => setToastMessage(null), 5000);
+      fetchFeed(activeFilter);
     } catch (err) {
-      console.warn('[WallOfFame] Failed to persist post to MongoDB:', err.message);
+      console.error('Failed to create post on backend:', err);
+      // Fallback: local optimistic state
+      const createdItem = {
+        ...newItem,
+        id: Date.now(),
+        name: user?.name ? `${user.name} (You)` : 'You',
+        isOwner: true,
+        squadName: isSolo ? 'Solo Quest 👤' : (newItem.squadName || 'Trip Squad'),
+        xpEarned: addedXp,
+        completionDate: 'Just now',
+      };
+      setFeedItems((prev) => [createdItem, ...prev]);
+      setToastMessage(`🎉 Achievement "${newItem.badge}" minted! (+${addedXp} XP)`);
+      setTimeout(() => setToastMessage(null), 5000);
     }
   };
 
   const handleDeletePost = async (postId) => {
-    const target = feedItems.find((p) => p.id === postId);
-    const subXp = Number(target?.xpEarned || target?.xp) || 250;
-    const nextFeed = feedItems.filter((p) => p.id !== postId);
-    const nextXp = computeXpFromPosts(nextFeed);
-    const nextWeekly = Math.max(18, weeklyQuestsCount - 1);
-
-    setFeedItems(nextFeed);
-    setUserXp(nextXp);
-    setWeeklyQuestsCount(nextWeekly);
-
     try {
-      localStorage.setItem('lifequest_walloffame_posts_v2', JSON.stringify(nextFeed));
-      localStorage.setItem('lifequest_user_xp_v1', String(nextXp));
-      localStorage.setItem('lifequest_weekly_count_v1', String(nextWeekly));
-    } catch {}
-
-    setToastMessage(`🗑️ Post deleted successfully! (-${subXp} XP)`);
-    setTimeout(() => setToastMessage(null), 4000);
-
-    // Delete from MongoDB backend
-    try {
-      const res = await api.deletePost(postId);
-      const fresh = await api.getFeed(activeFilter);
-      if (fresh?.success && Array.isArray(fresh.posts)) {
-        setFeedItems(fresh.posts);
-        const computed = computeXpFromPosts(fresh.posts);
-        setUserXp(computed);
-      }
+      await api.deletePost(postId);
+      setToastMessage(`🗑️ Post removed from Wall of Fame.`);
+      setTimeout(() => setToastMessage(null), 4000);
+      fetchFeed(activeFilter);
     } catch (err) {
-      console.warn('[WallOfFame] Failed to delete post on backend:', err.message);
+      console.warn('Could not delete post from backend, removing locally:', err.message);
+      setFeedItems((prev) => prev.filter((p) => p.id !== postId));
+      setToastMessage(`🗑️ Post deleted.`);
+      setTimeout(() => setToastMessage(null), 4000);
     }
   };
 
@@ -344,7 +273,11 @@ function WallOfFame() {
             </button>
             <button
               type="button"
-              onClick={() => setViewMode('trophy-room')}
+              onClick={() => {
+                requireAuth(() => setViewMode('trophy-room'), {
+                  prompt: 'Log in or sign up to view your private trophy room and badges!',
+                });
+              }}
               className={`px-3 py-1.5 font-space font-bold text-xs uppercase rounded-lg transition-all cursor-pointer ${
                 viewMode === 'trophy-room'
                   ? 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(255,237,0,1)]'
@@ -358,7 +291,11 @@ function WallOfFame() {
           {/* "+ Post Achievement" Button */}
           <button
             type="button"
-            onClick={() => setIsCelebrateOpen(true)}
+            onClick={() => {
+              requireAuth(() => setIsCelebrateOpen(true), {
+                prompt: 'Log in or sign up to mint your achievement on the Wall of Fame!',
+              });
+            }}
             className="px-5 py-2.5 bg-[#e4006c] text-white border-3 border-black rounded-xl font-space font-black text-xs uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer flex items-center gap-2"
           >
             <span>+</span>
