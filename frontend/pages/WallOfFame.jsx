@@ -98,9 +98,9 @@ const INITIAL_POST_IDS = new Set([1, 2, 3]);
 const computeXpFromPosts = (posts) => {
   if (!Array.isArray(posts)) return BASE_XP;
   const addedXp = posts
-    .filter((p) => p && (p.isOwner || (typeof p.id === 'number' && p.id > 100)))
-    .filter((p) => !INITIAL_POST_IDS.has(p.id))
-    .reduce((sum, p) => sum + (Number(p.xpEarned || p.xp) || 250), 0);
+    .filter((p) => p && (p.isOwner || p.author_id === 1 || p.name?.includes('Alex Rivero') || p.name?.includes('(You)')))
+    .filter((p) => p.id !== 1) // Post 1 is the initial demo post already counted in BASE_XP (1950)
+    .reduce((sum, p) => sum + (Number(p.xpEarned || p.xp || p.xp_earned) || 250), 0);
   return BASE_XP + addedXp;
 };
 
@@ -154,6 +154,8 @@ function WallOfFame() {
         if (isMounted && feedRes.status === 'fulfilled' && feedRes.value?.success && Array.isArray(feedRes.value.posts)) {
           if (feedRes.value.posts.length > 0) {
             setFeedItems(feedRes.value.posts);
+            const calculatedXp = computeXpFromPosts(feedRes.value.posts);
+            setUserXp(calculatedXp);
           }
         }
         if (isMounted && statsRes.status === 'fulfilled' && statsRes.value?.success && typeof statsRes.value.count === 'number') {
@@ -218,6 +220,8 @@ function WallOfFame() {
         const fresh = await api.getFeed(activeFilter);
         if (fresh?.success && Array.isArray(fresh.posts)) {
           setFeedItems(fresh.posts);
+          const computed = computeXpFromPosts(fresh.posts);
+          setUserXp(computed);
         }
       }
     } catch (err) {
@@ -247,7 +251,13 @@ function WallOfFame() {
 
     // Delete from MongoDB backend
     try {
-      await api.deletePost(postId);
+      const res = await api.deletePost(postId);
+      const fresh = await api.getFeed(activeFilter);
+      if (fresh?.success && Array.isArray(fresh.posts)) {
+        setFeedItems(fresh.posts);
+        const computed = computeXpFromPosts(fresh.posts);
+        setUserXp(computed);
+      }
     } catch (err) {
       console.warn('[WallOfFame] Failed to delete post on backend:', err.message);
     }

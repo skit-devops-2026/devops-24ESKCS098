@@ -126,6 +126,8 @@ async function getFeed(req, res, next) {
 
         return {
           id: p.id,
+          author_id: p.author_id,
+          isOwner: p.author_id === userId,
           filter: isRecent ? 'this-week' : 'my-groups',
           badge: p.badge_label || 'Quest Conquered',
           name: author.name || 'Quester',
@@ -284,7 +286,17 @@ async function createPost(req, res, next) {
         created_at: new Date(),
       });
 
-      return res.status(201).json({ success: true, post: newPost });
+      const updatedUser = await User.findOneAndUpdate(
+        { id: userId },
+        { $inc: { xp: calculatedXp } },
+        { returnDocument: 'after' }
+      );
+
+      return res.status(201).json({
+        success: true,
+        post: newPost,
+        updatedUserXp: updatedUser ? updatedUser.xp : undefined,
+      });
     }
 
     // In-Memory Dev Store Fallback
@@ -413,11 +425,23 @@ async function deletePost(req, res, next) {
         return res.status(403).json({ success: false, message: 'Unauthorized to delete post' });
       }
 
+      const xpToDeduct = post.xp_earned || 250;
       await Post.deleteOne({ id: postId });
       await Comment.deleteMany({ post_id: postId });
       await Reaction.deleteMany({ post_id: postId });
 
-      return res.json({ success: true, message: 'Post deleted' });
+      const updatedUser = await User.findOneAndUpdate(
+        { id: post.author_id },
+        { $inc: { xp: -xpToDeduct } },
+        { returnDocument: 'after' }
+      );
+
+      return res.json({
+        success: true,
+        message: 'Post deleted',
+        xpDeducted: xpToDeduct,
+        updatedUserXp: updatedUser ? updatedUser.xp : undefined,
+      });
     }
 
     // In-Memory Dev Store Fallback

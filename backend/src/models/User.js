@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema(
     password_hash: { type: String, default: '$2a$10$e8wZ...' },
     avatar_url: { type: String, default: '' },
     bio: { type: String, default: '' },
+    xp: { type: Number, default: 1950 },
     created_at: { type: Date, default: Date.now },
   },
   {
