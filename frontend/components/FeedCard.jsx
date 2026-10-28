@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { api } from '../services/api';
 import { createPortal } from 'react-dom';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 
@@ -117,15 +118,24 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
     }, 0);
   };
 
-  // Toggle Like
-  const handleToggleLike = () => {
+  // Toggle Like with MongoDB sync
+  const handleToggleLike = async () => {
     const nextLiked = !hasLiked;
     setHasLiked(nextLiked);
     setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+    try {
+      if (nextLiked) {
+        await api.upsertReaction(item.id, 'like');
+      } else {
+        await api.deleteReaction(item.id);
+      }
+    } catch (err) {
+      console.warn('[FeedCard] Sync like error:', err.message);
+    }
   };
 
-  // Add / Change Reaction
-  const handleSelectReaction = (emoji, type) => {
+  // Add / Change Reaction with MongoDB sync
+  const handleSelectReaction = async (emoji, type) => {
     const selectedType = type || getReactionType(emoji) || 'fire';
     const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
     const currentUserType = getReactionType(userReaction);
@@ -167,16 +177,27 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
       return next;
     });
     setShowReactionPicker(false);
+
+    try {
+      if (isDeselect) {
+        await api.deleteReaction(item.id);
+      } else {
+        await api.upsertReaction(item.id, selectedType);
+      }
+    } catch (err) {
+      console.warn('[FeedCard] Sync reaction error:', err.message);
+    }
   };
 
-  // Submit Comment
-  const handleCommentSubmit = (e) => {
+  // Submit Comment with MongoDB sync
+  const handleCommentSubmit = async (e) => {
     e.preventDefault();
     const text = newComment.trim();
     if (!text) return;
 
+    const tempId = Date.now();
     const tempComment = {
-      id: Date.now(),
+      id: tempId,
       authorId: 1,
       isOwner: true,
       name: 'You (Alex)',
@@ -187,11 +208,25 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
 
     setComments((prev) => [...prev, tempComment]);
     setNewComment('');
+
+    try {
+      const res = await api.addComment(item.id, text);
+      if (res?.success && res.comment) {
+        setComments((prev) => prev.map((c) => (c.id === tempId ? res.comment : c)));
+      }
+    } catch (err) {
+      console.warn('[FeedCard] Add comment error:', err.message);
+    }
   };
 
-  // Delete Comment
-  const handleDeleteComment = (commentId) => {
+  // Delete Comment with MongoDB sync
+  const handleDeleteComment = async (commentId) => {
     setComments((prev) => prev.filter((c) => c.id !== commentId));
+    try {
+      await api.deleteComment(commentId);
+    } catch (err) {
+      console.warn('[FeedCard] Delete comment error:', err.message);
+    }
   };
 
 
