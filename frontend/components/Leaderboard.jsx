@@ -37,14 +37,22 @@ function Leaderboard({ onViewFullRankings, userXp = 1950 }) {
       try {
         const res = await api.getLeaderboard({ period: 'all-time', limit: 10 });
         if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
-          const mapped = res.top.map((u) => ({
-            id: u.userId || u.id || u.name,
-            name: u.name,
-            rawXp: (u.isCurrentUser || u.name.includes('Alex Rivero')) ? userXp : (u.xp || 0),
-            avatar: u.avatar || '',
-            isMe: Boolean(u.isCurrentUser || u.name.includes('Alex Rivero')),
-          }));
-          setLivePlayers(mapped);
+          const seen = new Set();
+          const uniqueList = [];
+          for (const u of res.top) {
+            const key = u.name?.trim().toLowerCase();
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueList.push({
+                id: u.userId || u.id || u.name,
+                name: u.name,
+                rawXp: Boolean(u.isCurrentUser || u.name.includes('Alex Rivero')) ? userXp : (u.xp || 0),
+                avatar: u.avatar || '',
+                isMe: Boolean(u.isCurrentUser || u.name.includes('Alex Rivero')),
+              });
+            }
+          }
+          setLivePlayers(uniqueList);
         }
       } catch (err) {
         console.warn('[Leaderboard] API fetch fallback to static:', err.message);
