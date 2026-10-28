@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { saveAchievement } from '../bucketlist/storage';
+const ACHIEVEMENTS_KEY = 'lifequest_walloffame_achievements_v1';
+function saveAchievement(achievement) {
+  try {
+    const raw = localStorage.getItem(ACHIEVEMENTS_KEY);
+    const existing = raw ? JSON.parse(raw) : [];
+    localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify([achievement, ...(Array.isArray(existing) ? existing : [])]));
+  } catch (e) {
+    // ignore storage quota or private browsing errors
+  }
+}
 
 const PHOTO_PRESETS = [
   {
