@@ -1,7 +1,7 @@
 /**
  * BucketList.jsx
  *
- * This page connects entirely to the PostgreSQL-backed API via frontend/services/api.js.
+ * This page connects to the MongoDB-backed API via frontend/services/api.js.
  * localStorage is NOT used for persistent goal data.
  *
  * Auth: In development the backend uses req.user.id = 1 (Alex Rivero) via the

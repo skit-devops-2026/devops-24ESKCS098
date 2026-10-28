@@ -1,18 +1,14 @@
 require('dotenv').config();
 const app = require('./src/app');
-const { isPgConnected } = require('./src/config/db');
 const { connectMongo, isMongoConnected } = require('./src/config/mongodb');
 
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
-  // Attempt MongoDB connection (BucketList feature)
+  // Attempt MongoDB connection
   try {
     await connectMongo();
   } catch (err) {
-    // In production, MongoDB is required. The error has already been logged.
-    // We still start the server so teammates' PostgreSQL-backed routes work,
-    // but BucketList endpoints will return 503 until MONGODB_URI is set.
     console.error('[Startup] MongoDB connection error:', err.message);
   }
 
@@ -25,7 +21,6 @@ async function startServer() {
     console.log(`🥇 Leaderboard: http://localhost:${PORT}/api/leaderboard`);
     console.log(`🎯 Trophy Room: http://localhost:${PORT}/api/trophy-room/me`);
     console.log(`🎯 BucketList API: http://localhost:${PORT}/api/bucketlist`);
-    console.log(`💾 PostgreSQL: ${isPgConnected() ? '✅ Active' : '⚠️  In-Memory Fallback'}`);
     console.log(`🍃 MongoDB:    ${isMongoConnected() ? '✅ Active' : process.env.MONGODB_URI ? '❌ Connection Failed — check MONGODB_URI' : '⚠️  MONGODB_URI not set — using in-memory dev store'}`);
     console.log(`===============================================`);
   });

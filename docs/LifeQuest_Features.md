@@ -180,7 +180,7 @@ Suggested division of work across a 3-person team:
 |---|---|
 | Frontend | React |
 | Backend | Node.js + Express |
-| Database | MongoDB (flexible schema) or PostgreSQL |
+| Database | MongoDB |
 | Image/Video Storage | Cloudinary or AWS S3 |
 | Notifications | Firebase Cloud Messaging (push), Nodemailer (email) |
 | Authentication | JWT + bcrypt for password hashing |

@@ -404,7 +404,7 @@ async function updatePersonalGoal(req, res, next) {
           priority: dbPriority,
           deadline: dbDeadline,
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!updated) {
@@ -473,7 +473,7 @@ async function updateGoalStatus(req, res, next) {
       const updated = await Item.findOneAndUpdate(
         { id: goalId, owner_id: userId, group_id: null },
         updateData,
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!updated) {
@@ -1094,7 +1094,7 @@ async function updateTeamGoal(req, res, next) {
           priority: dbPriority,
           deadline: dbDeadline,
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!updated) {
@@ -1161,7 +1161,7 @@ async function updateTeamGoalStatus(req, res, next) {
       const updated = await Item.findOneAndUpdate(
         { id: goalId, group_id: squadId },
         updateData,
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!updated) return res.status(404).json({ success: false, message: 'Goal not found.' });
