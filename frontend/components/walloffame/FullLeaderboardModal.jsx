@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../services/api';
 import { createPortal } from 'react-dom';
 import { api } from '../../services/api';
 import { getUserAvatar } from '../../utils/avatar';

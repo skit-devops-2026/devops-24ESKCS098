@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { api } from '../services/api';
 import { createPortal } from 'react-dom';
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { useAuth } from '../context/AuthContext';
