@@ -1,11 +1,12 @@
 'use strict';
 
-const express = require('express');
+import express from 'express';
+import postController from '../controllers/postController.js';
+import reactionController from '../controllers/reactionController.js';
+import commentController from '../controllers/commentController.js';
+import { auth, optionalAuth } from '../middleware/auth.js';
+
 const router = express.Router();
-const postController = require('../controllers/postController');
-const reactionController = require('../controllers/reactionController');
-const commentController = require('../controllers/commentController');
-const { auth, optionalAuth } = require('../middleware/auth');
 
 // Public feed and community stats
 router.get('/', optionalAuth, postController.getFeed);
@@ -24,4 +25,4 @@ router.delete('/:id/reaction', auth, reactionController.deleteReaction);
 router.get('/:id/comments', optionalAuth, commentController.getComments);
 router.post('/:id/comments', auth, commentController.addComment);
 
-module.exports = router;
+export default router;

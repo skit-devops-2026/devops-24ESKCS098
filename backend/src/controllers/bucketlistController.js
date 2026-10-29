@@ -5,9 +5,9 @@
  * Handles category filtering, progress recalculations, and status mapping.
  */
 
-const mongoose = require('mongoose');
-const { isMongoConnected } = require('../config/db');
-const { Goal, Group, Contribution } = require('../models/bucketlistModels');
+import mongoose from 'mongoose';
+import { isMongoConnected } from '../config/db.js';
+import { Goal, Group, Contribution } from '../models/bucketlistModels.js';
 
 // Frontend hyphenated status & visibility mappings to MongoDB schema format
 const STATUS_TO_DB = {
@@ -1109,7 +1109,29 @@ async function updateMemberContribution(req, res, next) {
   return res.json({ success: true, message: 'Contribution saved (dev mode)', overallProgress: dbProgress });
 }
 
-module.exports = {
+export {
+  getBucketlistStats,
+  getPersonalGoals,
+  createPersonalGoal,
+  getPersonalGoalById,
+  updatePersonalGoal,
+  updateGoalStatus,
+  deletePersonalGoal,
+  getSquads,
+  createSquad,
+  joinSquad,
+  leaveSquad,
+  getSquadMembers,
+  updateSquad,
+  getTeamGoals,
+  createTeamGoal,
+  updateTeamGoal,
+  updateTeamGoalStatus,
+  deleteTeamGoal,
+  updateMemberContribution,
+};
+
+export default {
   getBucketlistStats,
   getPersonalGoals,
   createPersonalGoal,

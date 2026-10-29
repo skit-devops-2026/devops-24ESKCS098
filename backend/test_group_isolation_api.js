@@ -5,10 +5,10 @@
  * Tests multi-user isolation, join codes, permissions, and private/public access.
  */
 
-const http = require('http');
-const mongoose = require('mongoose');
-const jwt = require('jsonwebtoken');
-const app = require('./src/app');
+import http from 'http';
+import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import app from './src/app.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret';
 

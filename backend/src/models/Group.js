@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const memberSchema = new mongoose.Schema(
   {
@@ -52,6 +52,6 @@ groupSchema.pre('validate', function () {
   if (!this.id && this._id) this.id = this._id.toString();
 });
 
-const Group = mongoose.models.Group || mongoose.model('Group', groupSchema);
+export const Group = mongoose.models.Group || mongoose.model('Group', groupSchema);
 
-module.exports = Group;
+export default Group;

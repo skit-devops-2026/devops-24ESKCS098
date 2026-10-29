@@ -35,4 +35,5 @@ function errorHandler(err, req, res, next) {
   });
 }
 
-module.exports = errorHandler;
+export { errorHandler };
+export default errorHandler;

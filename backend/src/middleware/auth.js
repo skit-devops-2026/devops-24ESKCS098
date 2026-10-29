@@ -1,6 +1,6 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret_key_2026';
 
@@ -83,7 +83,5 @@ function optionalAuth(req, res, next) {
   return next();
 }
 
-module.exports = authMiddleware;
-module.exports.auth = authMiddleware;
-module.exports.authMiddleware = authMiddleware;
-module.exports.optionalAuth = optionalAuth;
+export { authMiddleware, optionalAuth, authMiddleware as auth };
+export default authMiddleware;

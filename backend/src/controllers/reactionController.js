@@ -1,5 +1,5 @@
-const { Reaction } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+import { Reaction } from '../models/index.js';
+import { isMongoConnected, inMemoryStore } from '../config/db.js';
 
 // PUT /api/posts/:id/reaction - Add or change reaction
 async function upsertReaction(req, res, next) {
@@ -125,7 +125,12 @@ async function deleteReaction(req, res, next) {
   }
 }
 
-module.exports = {
+export {
+  upsertReaction,
+  deleteReaction,
+};
+
+export default {
   upsertReaction,
   deleteReaction,
 };

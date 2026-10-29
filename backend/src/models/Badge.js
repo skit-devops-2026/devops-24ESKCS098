@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const badgeUnlockSchema = new mongoose.Schema(
   {
@@ -26,7 +26,6 @@ const badgeSchema = new mongoose.Schema(
   }
 );
 
-const Badge = mongoose.models.Badge || mongoose.model('Badge', badgeSchema);
+export const Badge = mongoose.models.Badge || mongoose.model('Badge', badgeSchema);
 
-module.exports = Badge;
-
+export default Badge;

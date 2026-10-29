@@ -1,12 +1,23 @@
-const User = require('./User');
-const Group = require('./Group');
-const { Goal, Contribution } = require('./bucketlistModels');
-const Post = require('./Post');
-const Comment = require('./Comment');
-const Reaction = require('./Reaction');
-const Badge = require('./Badge');
+import User from './User.js';
+import Group from './Group.js';
+import { Goal, Contribution } from './bucketlistModels.js';
+import Post from './Post.js';
+import Comment from './Comment.js';
+import Reaction from './Reaction.js';
+import Badge from './Badge.js';
 
-module.exports = {
+export {
+  User,
+  Group,
+  Goal,
+  Contribution,
+  Post,
+  Comment,
+  Reaction,
+  Badge,
+};
+
+export default {
   User,
   Group,
   Goal,

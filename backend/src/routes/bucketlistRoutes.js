@@ -1,9 +1,10 @@
 'use strict';
 
-const express = require('express');
+import express from 'express';
+import { auth, optionalAuth } from '../middleware/auth.js';
+import ctrl from '../controllers/bucketlistController.js';
+
 const router = express.Router();
-const { auth, optionalAuth } = require('../middleware/auth');
-const ctrl = require('../controllers/bucketlistController');
 
 // Overall stats (guest-friendly preview)
 router.get('/stats', optionalAuth, ctrl.getBucketlistStats);
@@ -35,4 +36,4 @@ router.patch('/squads/:squadId/goals/:id/status', ctrl.updateTeamGoalStatus);
 router.patch('/squads/:squadId/goals/:id/contribution', ctrl.updateMemberContribution);
 router.delete('/squads/:squadId/goals/:id', ctrl.deleteTeamGoal);
 
-module.exports = router;
+export default router;

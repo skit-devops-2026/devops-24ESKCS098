@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import { upload } from '../middleware/upload.js';
+import { uploadToCloudinary } from '../config/cloudinary.js';
+import { auth } from '../middleware/auth.js';
+
 const router = express.Router();
-const upload = require('../middleware/upload');
-const { uploadToCloudinary } = require('../config/cloudinary');
-const auth = require('../middleware/auth');
 
 // POST /api/upload - Upload proof photo from device
 router.post('/', auth, upload.single('image'), async (req, res, next) => {
@@ -24,4 +25,4 @@ router.post('/', auth, upload.single('image'), async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

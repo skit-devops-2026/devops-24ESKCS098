@@ -1,8 +1,15 @@
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '.env') });
-require('dotenv').config();
-const app = require('./src/app');
-const { connectMongo, isMongoConnected } = require('./src/config/db');
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config();
+
+import app from './src/app.js';
+import { connectMongo, isMongoConnected } from './src/config/db.js';
 
 const PORT = process.env.PORT || 5000;
 

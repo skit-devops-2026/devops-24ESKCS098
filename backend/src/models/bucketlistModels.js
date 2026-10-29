@@ -13,7 +13,7 @@
  * The controller maps frontend hyphenated values ↔ MongoDB values via constants.
  */
 
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 const { Schema } = mongoose;
 
 // ── Goal (personal + team) ────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ GoalSchema.index({ groupId: 1, status: 1 });
 const Goal = mongoose.models.Goal || mongoose.model('Goal', GoalSchema);
 
 // ── Group (Squad) ─────────────────────────────────────────────────────────────
-const Group = require('./Group');
+import Group from './Group.js';
 
 // ── Contribution (per-member progress on a team goal) ─────────────────────────
 
@@ -91,4 +91,5 @@ ContributionSchema.index({ goalId: 1, userId: 1 }, { unique: true });
 const Contribution =
   mongoose.models.Contribution || mongoose.model('Contribution', ContributionSchema);
 
-module.exports = { Goal, Group, Contribution };
+export { Goal, Group, Contribution };
+export default { Goal, Group, Contribution };

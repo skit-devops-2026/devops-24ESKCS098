@@ -1,10 +1,10 @@
 'use strict';
 
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
-const { User } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import { User } from '../models/index.js';
+import { isMongoConnected, inMemoryStore } from '../config/db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret_key_2026';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -331,7 +331,15 @@ async function logout(req, res) {
   });
 }
 
-module.exports = {
+export {
+  signup,
+  signup as register,
+  login,
+  getMe,
+  logout,
+};
+
+export default {
   signup,
   register: signup,
   login,

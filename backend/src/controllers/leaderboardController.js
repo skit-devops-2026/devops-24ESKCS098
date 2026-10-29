@@ -1,5 +1,5 @@
-const { User, Group, Post } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+import { User, Group, Post } from '../models/index.js';
+import { isMongoConnected, inMemoryStore } from '../config/db.js';
 
 function getPeriodStartDate(period) {
   const now = new Date();
@@ -21,20 +21,12 @@ async function getLeaderboard(req, res, next) {
     if (isMongoConnected()) {
       const periodStart = getPeriodStartDate(period);
 
-<<<<<<< HEAD
-      // Find user's squads or default squads for guests
-      const userGroups = userId
-        ? await Group.find({ 'members.user_id': userId }).lean()
-        : await Group.find({}).lean();
-      let targetGroupIds = userGroups.map((g) => g.id);
-=======
       // Find relevant squads: if userId is present, find user's squads; otherwise find public/recent squads
       const groupFilter = userId
         ? { $or: [{ 'members.user_id': userId }, { 'members.userId': userId }] }
         : {};
       const userGroups = await Group.find(groupFilter).limit(20).lean();
       let targetGroupIds = userGroups.map((g) => g.id || g._id);
->>>>>>> main
       if (groupId) {
         targetGroupIds = targetGroupIds.filter((id) => String(id) === String(groupId));
       }
@@ -185,9 +177,6 @@ async function getLeaderboard(req, res, next) {
       }
 
       const topRankings = allRankings.slice(0, limit);
-<<<<<<< HEAD
-      const myRow = userId ? allRankings.find((r) => r.isCurrentUser) : null;
-=======
       const myRow = userId
         ? (allRankings.find((r) => r.isCurrentUser) || {
             rank: allRankings.length + 1,
@@ -199,7 +188,6 @@ async function getLeaderboard(req, res, next) {
             xp: 0,
             name: 'Guest Quester',
           };
->>>>>>> main
 
       return res.json({
         success: true,
@@ -352,6 +340,10 @@ async function getLeaderboard(req, res, next) {
   }
 }
 
-module.exports = {
+export {
+  getLeaderboard,
+};
+
+export default {
   getLeaderboard,
 };

@@ -1,6 +1,7 @@
 {
   "name": "lifequest-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "LifeQuest Wall of Fame Backend Service",
   "main": "server.js",
   "scripts": {

@@ -1,5 +1,8 @@
 'use strict';
 
+import mongoose from 'mongoose';
+import app from './src/app.js';
+
 /**
  * Auth API Tests
  * Tests Signup, Login, Input Validations, Duplicate Email rejection,
@@ -30,7 +33,6 @@ async function run() {
     if (health.status === 'ok') console.log(`✓ Connected to backend at ${BASE}`);
   } catch {
     console.log('No backend at :5000; starting in-process server...');
-    const app = require('./src/app');
     await new Promise((resolve) => {
       serverInstance = app.listen(0, () => {
         const port = serverInstance.address().port;
@@ -197,7 +199,6 @@ async function run() {
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Auth Results: ${passed} passed, ${failed} failed`);
   if (serverInstance) serverInstance.close();
-  const mongoose = require('mongoose');
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect().catch(() => {});
   }
@@ -212,7 +213,6 @@ async function run() {
 run().catch(async (err) => {
   console.error('Test error:', err);
   if (serverInstance) serverInstance.close();
-  const mongoose = require('mongoose');
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect().catch(() => {});
   }

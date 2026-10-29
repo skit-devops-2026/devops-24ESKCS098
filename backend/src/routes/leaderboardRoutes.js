@@ -1,11 +1,12 @@
 'use strict';
 
-const express = require('express');
+import express from 'express';
+import leaderboardController from '../controllers/leaderboardController.js';
+import { optionalAuth } from '../middleware/auth.js';
+
 const router = express.Router();
-const leaderboardController = require('../controllers/leaderboardController');
-const { optionalAuth } = require('../middleware/auth');
 
 // Leaderboard rankings with optional squad, period, and search filters
 router.get('/', optionalAuth, leaderboardController.getLeaderboard);
 
-module.exports = router;
+export default router;
