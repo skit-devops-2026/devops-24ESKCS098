@@ -83,12 +83,14 @@ const initialGroups = [
     cover_url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&q=80',
     join_code: 'LQ-TRIP',
     admin_id: 1,
+    adminId: 1,
+    joinCode: 'LQ-TRIP',
     members: [
-      { user_id: 1, role: 'admin' },
-      { user_id: 2, role: 'member' },
-      { user_id: 3, role: 'member' },
-      { user_id: 4, role: 'member' },
-      { user_id: 5, role: 'member' },
+      { user_id: 1, userId: 1, role: 'admin' },
+      { user_id: 2, userId: 2, role: 'member' },
+      { user_id: 3, userId: 3, role: 'member' },
+      { user_id: 4, userId: 4, role: 'member' },
+      { user_id: 5, userId: 5, role: 'member' },
     ],
   },
   {
@@ -98,9 +100,11 @@ const initialGroups = [
     cover_url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&q=80',
     join_code: 'LQ-CLG1',
     admin_id: 2,
+    adminId: 2,
+    joinCode: 'LQ-CLG1',
     members: [
-      { user_id: 1, role: 'member' },
-      { user_id: 2, role: 'admin' },
+      { user_id: 1, userId: 1, role: 'member' },
+      { user_id: 2, userId: 2, role: 'admin' },
     ],
   },
   {
@@ -110,9 +114,11 @@ const initialGroups = [
     cover_url: 'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=600&q=80',
     join_code: 'LQ-FITN',
     admin_id: 3,
+    adminId: 3,
+    joinCode: 'LQ-FITN',
     members: [
-      { user_id: 1, role: 'member' },
-      { user_id: 3, role: 'admin' },
+      { user_id: 1, userId: 1, role: 'member' },
+      { user_id: 3, userId: 3, role: 'admin' },
     ],
   },
 ];

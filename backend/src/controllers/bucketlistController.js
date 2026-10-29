@@ -181,12 +181,12 @@ function requireMongo(res) {
 // ── Overall Stats ─────────────────────────────────────────────────────────────
 
 async function getBucketlistStats(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
 
   if (isMongoConnected()) {
     try {
       const results = await Goal.aggregate([
-        { $match: { ownerId: userId, groupId: null } },
+        { $match: userId ? { ownerId: userId, groupId: null } : { visibility: 'shared' } },
         {
           $group: {
             _id: null,
@@ -206,7 +206,7 @@ async function getBucketlistStats(req, res, next) {
   }
 
   // Dev in-memory fallback
-  const items = _inMemGoals.filter((g) => g.ownerId === userId && g.groupId == null);
+  const items = userId ? _inMemGoals.filter((g) => g.ownerId === userId && g.groupId == null) : _inMemGoals.filter((g) => g.visibility === 'shared');
   const total = items.length;
   const completed = items.filter((g) => g.status === 'completed').length;
   const inProgress = items.filter((g) => g.status === 'in_progress').length;
@@ -218,7 +218,7 @@ async function getBucketlistStats(req, res, next) {
 // ── Personal Goals ─────────────────────────────────────────────────────────────
 
 async function getPersonalGoals(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { status, category } = req.query;
 
   if (isMongoConnected()) {
@@ -243,7 +243,7 @@ async function getPersonalGoals(req, res, next) {
 }
 
 async function createPersonalGoal(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { title, description, category, difficulty, visibility, deadline, priority } = req.body;
 
   const err = validateRequired(title, description);
@@ -290,7 +290,7 @@ async function createPersonalGoal(req, res, next) {
 }
 
 async function getPersonalGoalById(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { id } = req.params;
 
   if (isMongoConnected()) {
@@ -314,7 +314,7 @@ async function getPersonalGoalById(req, res, next) {
 }
 
 async function updatePersonalGoal(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { id } = req.params;
   const { title, description, category, difficulty, visibility, deadline, priority } = req.body;
 
@@ -365,7 +365,7 @@ async function updatePersonalGoal(req, res, next) {
 }
 
 async function updateGoalStatus(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { id } = req.params;
   const { status, progress } = req.body;
 
@@ -410,7 +410,7 @@ async function updateGoalStatus(req, res, next) {
 }
 
 async function deletePersonalGoal(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { id } = req.params;
 
   if (isMongoConnected()) {
@@ -437,7 +437,7 @@ async function deletePersonalGoal(req, res, next) {
 // ── Squads ─────────────────────────────────────────────────────────────────────
 
 async function getSquads(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
 
   if (isMongoConnected()) {
     try {
@@ -479,7 +479,7 @@ async function getSquads(req, res, next) {
 }
 
 async function createSquad(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { name, description } = req.body;
 
   if (!name || !name.trim()) {
@@ -529,7 +529,7 @@ async function createSquad(req, res, next) {
 }
 
 async function joinSquad(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { code, joinCode } = req.body;
   const rawCode = ((code || joinCode || '')).trim().toUpperCase();
 
@@ -539,12 +539,12 @@ async function joinSquad(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      const group = await Group.findOne({ joinCode: rawCode });
+      const group = await Group.findOne({ $or: [{ joinCode: rawCode }, { join_code: rawCode }] });
       if (!group) {
         return res.status(404).json({ success: false, message: 'Invalid squad join code.' });
       }
 
-      const alreadyMember = group.members.some((m) => m.userId === userId);
+      const alreadyMember = group.members.some((m) => (m.userId ?? m.user_id) === userId);
       if (alreadyMember) {
         return res.json({
           success: true,
@@ -553,7 +553,7 @@ async function joinSquad(req, res, next) {
         });
       }
 
-      group.members.push({ userId, role: 'member', joinedAt: new Date() });
+      group.members.push({ userId, user_id: userId, role: 'member', joinedAt: new Date(), joined_at: new Date() });
       await group.save();
 
       return res.status(200).json({
@@ -585,7 +585,7 @@ async function joinSquad(req, res, next) {
 }
 
 async function leaveSquad(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId } = req.params;
 
   if (isMongoConnected()) {
@@ -632,7 +632,7 @@ async function leaveSquad(req, res, next) {
 }
 
 async function getSquadMembers(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId } = req.params;
 
   if (isMongoConnected()) {
@@ -680,7 +680,7 @@ async function getSquadMembers(req, res, next) {
 }
 
 async function updateSquad(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId } = req.params;
   const { description, coverUrl, name } = req.body;
 
@@ -723,7 +723,7 @@ async function updateSquad(req, res, next) {
 // ── Team Goals ─────────────────────────────────────────────────────────────────
 
 async function getTeamGoals(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId } = req.params;
   const { status, category } = req.query;
 
@@ -818,7 +818,7 @@ async function getTeamGoals(req, res, next) {
 }
 
 async function createTeamGoal(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId } = req.params;
   const { title, description, category, difficulty, deadline, priority } = req.body;
 
@@ -884,7 +884,7 @@ async function createTeamGoal(req, res, next) {
 }
 
 async function updateTeamGoal(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId, id } = req.params;
   const { title, description, category, difficulty, deadline, priority } = req.body;
 
@@ -937,7 +937,7 @@ async function updateTeamGoal(req, res, next) {
 }
 
 async function updateTeamGoalStatus(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId, id } = req.params;
   const { status, progress } = req.body;
 
@@ -1020,21 +1020,29 @@ async function updateTeamGoalStatus(req, res, next) {
 }
 
 async function deleteTeamGoal(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId, id } = req.params;
 
   if (isMongoConnected()) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(squadId) || !mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: 'Invalid ID.' });
+      const group = await findGroupByIdOrKey(squadId);
+      if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
+
+      const targetGroupIds = [squadId, group._id ? String(group._id) : null, group.id != null ? String(group.id) : null, group.id != null ? Number(group.id) : null].filter(Boolean);
+      const goal = await Goal.findOne({ _id: id, groupId: { $in: targetGroupIds } });
+      if (!goal) {
+        return res.status(404).json({ success: false, message: 'Goal not found.' });
       }
 
-      // Only creator can delete their team goal
-      const result = await Goal.deleteOne({ _id: id, groupId: squadId, ownerId: userId });
-      if (result.deletedCount === 0) {
-        return res.status(404).json({ success: false, message: 'Goal not found or not authorized.' });
+      const isCreator = goal.ownerId === userId;
+      const isAdmin = (group.adminId ?? group.admin_id) === userId ||
+        (group.members || []).some((m) => (m.userId ?? m.user_id) === userId && m.role === 'admin');
+
+      if (!isCreator && !isAdmin) {
+        return res.status(403).json({ success: false, message: 'Only the goal creator or squad admin can delete this team goal.' });
       }
-      // Clean up contributions
+
+      await Goal.deleteOne({ _id: id });
       await Contribution.deleteMany({ goalId: id });
       return res.json({ success: true, message: 'Team goal deleted.' });
     } catch (err) {
@@ -1042,15 +1050,23 @@ async function deleteTeamGoal(req, res, next) {
     }
   }
 
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find((g) => String(g._id) === String(squadId) || String(g.id) === String(squadId));
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
+  const isMember = (group.members || []).some((m) => (m.userId ?? m.user_id) === userId);
   if (!isMember) return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
 
-  const idx = _inMemGoals.findIndex(
-    (g) => String(g._id) === String(id) && String(g.groupId) === String(squadId) && g.ownerId === userId
-  );
-  if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
+  const goal = _inMemGoals.find((g) => String(g._id) === String(id) && (String(g.groupId) === String(squadId) || String(g.groupId) === String(group.id)));
+  if (!goal) return res.status(404).json({ success: false, message: 'Goal not found.' });
+
+  const isCreator = goal.ownerId === userId;
+  const isAdmin = (group.adminId ?? group.admin_id) === userId ||
+    (group.members || []).some((m) => (m.userId ?? m.user_id) === userId && m.role === 'admin');
+
+  if (!isCreator && !isAdmin) {
+    return res.status(403).json({ success: false, message: 'Only the goal creator or squad admin can delete this team goal.' });
+  }
+
+  const idx = _inMemGoals.findIndex((g) => g === goal);
   _inMemGoals.splice(idx, 1);
   return res.json({ success: true, message: 'Team goal deleted.' });
 }
@@ -1063,7 +1079,7 @@ async function deleteTeamGoal(req, res, next) {
  * This does NOT overwrite other members' contributions.
  */
 async function updateMemberContribution(req, res, next) {
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const { squadId, id } = req.params;
   const { progress, note } = req.body;
 
@@ -1123,15 +1139,21 @@ async function updateMemberContribution(req, res, next) {
   }
 
   // In-memory fallback
-  const group = _inMemGroups.find((g) => String(g._id) === String(squadId));
+  const group = _inMemGroups.find((g) => String(g._id) === String(squadId) || String(g.id) === String(squadId));
   if (!group) return res.status(404).json({ success: false, message: 'Squad not found.' });
-  const isMember = (group.members || []).some((m) => m.userId === userId);
+  const isMember = (group.members || []).some((m) => (m.userId ?? m.user_id) === userId);
   if (!isMember) {
     return res.status(403).json({ success: false, message: 'Not a member of this squad.' });
   }
-  const idx = _inMemGoals.findIndex((g) => String(g._id) === String(id) && String(g.groupId) === String(squadId));
+  const idx = _inMemGoals.findIndex((g) => String(g._id) === String(id) && (String(g.groupId) === String(squadId) || String(g.groupId) === String(group.id)));
   if (idx === -1) return res.status(404).json({ success: false, message: 'Goal not found.' });
-  return res.json({ success: true, message: 'Contribution saved (dev mode)', overallProgress: dbProgress });
+  return res.json({
+    success: true,
+    message: 'Contribution saved (dev mode)',
+    goal: mapGoalToFrontend(_inMemGoals[idx]),
+    myContribution: { progress: dbProgress, note: note || '', updatedAt: new Date() },
+    overallProgress: dbProgress,
+  });
 }
 
 export {
