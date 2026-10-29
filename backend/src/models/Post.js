@@ -28,6 +28,7 @@ const postSchema = new mongoose.Schema(
 
 postSchema.index({ group_id: 1, completed_at: -1 });
 postSchema.index({ author_id: 1, completed_at: -1 });
+postSchema.index({ visibility: 1, completed_at: -1 });
 postSchema.index({ completed_at: -1 });
 
 export const Post = mongoose.models.Post || mongoose.model('Post', postSchema);

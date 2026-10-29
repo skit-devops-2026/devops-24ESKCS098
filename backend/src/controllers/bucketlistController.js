@@ -66,16 +66,16 @@ function mapGoalToFrontend(doc) {
 
 function mapGroupToFrontend(doc, userId) {
   const obj = typeof doc.toObject === 'function' ? doc.toObject() : doc;
-  const membership = (obj.members || []).find((m) => m.userId === userId);
+  const membership = (obj.members || []).find((m) => (m.userId ?? m.user_id) === userId);
   const totalMembers = (obj.members || []).length;
   return {
     id: obj._id ? obj._id.toString() : String(obj.id),
     name: obj.name,
     description: obj.description || '',
-    cover_url: obj.coverUrl || null,
-    join_code: obj.joinCode,
-    is_private: obj.isPrivate,
-    user_role: membership ? membership.role : 'member',
+    cover_url: obj.coverUrl || obj.cover_url || null,
+    join_code: obj.joinCode || obj.join_code,
+    is_private: obj.isPrivate !== undefined ? obj.isPrivate : obj.is_private,
+    user_role: ((obj.adminId ?? obj.admin_id) === userId || membership?.role === 'admin') ? 'admin' : membership ? membership.role : 'member',
     members: totalMembers,
     active_quests: obj.active_quests || 0,
   };
@@ -93,6 +93,20 @@ function generateJoinCode(name) {
   const base = (name || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'SQUD';
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `LQ-${base}${rand}`;
+}
+
+async function findGroupByIdOrKey(squadId) {
+  if (mongoose.Types.ObjectId.isValid(squadId)) {
+    const byId = await Group.findById(squadId);
+    if (byId) return byId;
+  }
+  const num = parseInt(squadId, 10);
+  return Group.findOne({
+    $or: [
+      { id: squadId },
+      ...(isNaN(num) ? [] : [{ id: num }]),
+    ],
+  });
 }
 
 // ── In-memory dev store fallback ──────────────────────────────────────────────
@@ -427,19 +441,30 @@ async function getSquads(req, res, next) {
 
   if (isMongoConnected()) {
     try {
-      const groups = await Group.find({ 'members.userId': userId });
+      const groups = await Group.find({
+        $or: [
+          { 'members.userId': userId },
+          { 'members.user_id': userId },
+          { adminId: userId },
+          { admin_id: userId },
+        ],
+      });
 
       // Get active quest counts per group
-      const groupIds = groups.map((g) => g._id);
+      const groupIds = [
+        ...groups.map((g) => g._id ? String(g._id) : null),
+        ...groups.map((g) => g.id != null ? String(g.id) : null),
+        ...groups.map((g) => g.id != null ? Number(g.id) : null),
+      ].filter(Boolean);
       const questCounts = await Goal.aggregate([
-        { $match: { groupId: { $in: groupIds.map(String) }, status: { $in: ['not_started', 'in_progress'] } } },
+        { $match: { groupId: { $in: groupIds }, status: { $in: ['not_started', 'in_progress'] } } },
         { $group: { _id: '$groupId', count: { $sum: 1 } } },
       ]);
       const questMap = Object.fromEntries(questCounts.map((q) => [String(q._id), q.count]));
 
       const squads = groups.map((g) => ({
         ...mapGroupToFrontend(g, userId),
-        active_quests: questMap[String(g._id)] || 0,
+        active_quests: questMap[String(g._id)] || questMap[String(g.id)] || 0,
       }));
       return res.json({ success: true, squads });
     } catch (err) {
@@ -448,7 +473,7 @@ async function getSquads(req, res, next) {
   }
 
   const squads = _inMemGroups
-    .filter((g) => (g.members || []).some((m) => m.userId === userId))
+    .filter((g) => (g.members || []).some((m) => (m.userId ?? m.user_id) === userId))
     .map((g) => mapGroupToFrontend(g, userId));
   return res.json({ success: true, squads });
 }

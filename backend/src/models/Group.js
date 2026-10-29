@@ -50,7 +50,18 @@ groupSchema.pre('validate', function () {
   if (this.isPrivate !== undefined && this.is_private === undefined) this.is_private = this.isPrivate;
   if (this.is_private !== undefined && this.isPrivate === undefined) this.isPrivate = this.is_private;
   if (!this.id && this._id) this.id = this._id.toString();
+
+  if (Array.isArray(this.members)) {
+    this.members.forEach((m) => {
+      if (m.userId && !m.user_id) m.user_id = m.userId;
+      if (m.user_id && !m.userId) m.userId = m.user_id;
+      if (m.joinedAt && !m.joined_at) m.joined_at = m.joinedAt;
+      if (m.joined_at && !m.joinedAt) m.joinedAt = m.joined_at;
+    });
+  }
 });
+
+groupSchema.index({ join_code: 1 }, { unique: true, sparse: true });
 
 export const Group = mongoose.models.Group || mongoose.model('Group', groupSchema);
 

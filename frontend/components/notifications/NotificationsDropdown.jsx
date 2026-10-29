@@ -1,72 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 
-const INITIAL_NOTIFICATIONS = [
-  {
-    id: 'notif-1',
-    type: 'invite',
-    category: 'INVITES',
-    title: 'Riya invited you to join "Goa Roadtrippers \'24"',
-    description: 'Trip Squad • 5 members • Starts Nov 15',
-    timestamp: '12m ago',
-    unread: true,
-    actionRequired: true,
-    sender: {
-      name: 'Riya Sharma',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80',
-    },
-    squadName: 'Goa Roadtrippers \'24',
-  },
-  {
-    id: 'notif-2',
-    type: 'reminder',
-    category: 'REMINDERS',
-    title: 'Mt. Fuji Altitude Cardio Checkpoint due in 2 days!',
-    description: 'TRIP SQUAD • 4/5 members completed their checkpoint.',
-    timestamp: '2h ago',
-    unread: true,
-    actionRequired: true,
-    actionLabel: 'LOG CHECKPOINT',
-    badge: 'URGENT ⚡',
-  },
-  {
-    id: 'notif-3',
-    type: 'celebration',
-    category: 'ALL',
-    title: 'Arjun completed "Master 5 Authentic Pasta Recipes" 🍝',
-    description: 'Awarded Chef Apprentice Badge + 250 XP for the squad.',
-    timestamp: '5h ago',
-    unread: true,
-    actionRequired: false,
-    reactions: ['🔥 4', '👏 6'],
-  },
-  {
-    id: 'notif-4',
-    type: 'reminder',
-    category: 'REMINDERS',
-    title: 'Target date approaching: "Learn to Salsa"',
-    description: '10 days remaining to hit your target milestone.',
-    timestamp: '1d ago',
-    unread: false,
-    actionRequired: true,
-    actionLabel: 'UPDATE PROGRESS',
-  },
-  {
-    id: 'notif-5',
-    type: 'social',
-    category: 'ALL',
-    title: 'Sam tagged you in "Backpacking Vietnam" photo dump',
-    description: '"Best trek of our lives! Check the summit photos."',
-    timestamp: '2d ago',
-    unread: false,
-    actionRequired: false,
-  },
-];
-
-function NotificationsDropdown({ isOpen, onClose, onNotificationClick }) {
+function NotificationsDropdown({ isOpen, onClose, onNotificationClick, initialNotifications = [] }) {
   const [activeTab, setActiveTab] = useState('ALL');
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState(initialNotifications);
   const [inviteStatus, setInviteStatus] = useState({});
   const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    setNotifications(initialNotifications);
+  }, [initialNotifications]);
+
 
   // Close on outside click or Escape key
   useEffect(() => {

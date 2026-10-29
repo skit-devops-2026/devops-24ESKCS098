@@ -228,6 +228,13 @@ function BucketList() {
     return statusMatch && categoryMatch;
   });
 
+  const categoryCounts = goals.reduce((acc, g) => {
+    if (g.category) {
+      acc[g.category] = (acc[g.category] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
   const getCount = useCallback(
     (key) =>
       key === 'all'
@@ -235,6 +242,7 @@ function BucketList() {
         : goals.filter((g) => g.status === key).length,
     [goals]
   );
+
 
   // ── Handlers: Personal Goals ──────────────────────────────────────────────
 
@@ -678,7 +686,10 @@ function BucketList() {
                   selectedCategory={activeCategory === 'all' ? null : activeCategory}
                   onSelectCategory={(cat) => setActiveCategory(cat || 'all')}
                   onAddGroupClick={() => setIsCreateSquadOpen(true)}
+                  categoryCounts={categoryCounts}
+                  streak={currentUser?.streak || 0}
                 />
+
               </div>
             </aside>
 
@@ -747,21 +758,41 @@ function BucketList() {
 
             {squadView === 'challenge' ? (
               <GroupChallengeBanner
+                challenge={
+                  teamGoals.length > 0
+                    ? {
+                        title: teamGoals[0].title,
+                        description: teamGoals[0].description,
+                        squad: currentSquad?.name || 'SQUAD',
+                        daysLeft: teamGoals[0].target_date
+                          ? Math.max(1, Math.ceil((new Date(teamGoals[0].target_date) - new Date()) / (1000 * 60 * 60 * 24)))
+                          : 14,
+                        overallPercent: teamGoals[0].progress || 0,
+                        completedCount: teamGoals.filter((g) => g.status === 'completed').length,
+                        totalCount: teamGoals.length,
+                        reward: {
+                          xp: 500,
+                          badge: teamGoals[0].badge_label || 'Squad Champion',
+                          badgeDesc: `Earned when squad completes "${teamGoals[0].title}"`,
+                        },
+                        members: [],
+                      }
+                    : null
+                }
+                squadName={currentSquad?.name}
                 onLogCheckpoint={() => {
-                  const activeGoal = goals.find((g) => g.status === 'in-progress') || goals[0] || {
-                    id: 'challenge-mt-fuji',
-                    title: 'Summit Mount Fuji at Sunrise 🏔️',
-                    description: 'Shared milestone challenge! Complete collective altitude checkpoints, gear prep checks, and endurance runs.',
-                    category: 'ADVENTURE',
-                    progress: 80,
-                    status: 'in-progress',
-                  };
-                  setDrawerGoal(activeGoal);
+                  const activeGoal = teamGoals.find((g) => g.status === 'in-progress') || teamGoals[0] || goals.find((g) => g.status === 'in-progress') || goals[0];
+                  if (activeGoal) {
+                    setDrawerGoal(activeGoal);
+                  } else {
+                    showToast('Create or select a goal first to log progress checkpoints!');
+                  }
                 }}
                 onOpenDiscussion={() => {
-                  showToast('💬 Squad discussion thread opened for Mt. Fuji summit quest!', 4000);
+                  showToast(`💬 Squad discussion thread opened for ${currentSquad?.name || 'your squad'}!`, 4000);
                 }}
               />
+
             ) : (
               <SquadMembersWidget
                 squadName={currentSquad?.name || 'Select a Squad'}

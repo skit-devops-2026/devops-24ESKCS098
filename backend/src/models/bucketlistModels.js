@@ -63,6 +63,7 @@ const GoalSchema = new Schema(
 // Indexes for common query patterns
 GoalSchema.index({ ownerId: 1, groupId: 1, createdAt: -1 });
 GoalSchema.index({ groupId: 1, status: 1 });
+GoalSchema.index({ groupId: 1, createdAt: -1 });
 
 const Goal = mongoose.models.Goal || mongoose.model('Goal', GoalSchema);
 
@@ -74,7 +75,7 @@ import Group from './Group.js';
 const ContributionSchema = new Schema(
   {
     goalId: { type: Schema.Types.ObjectId, ref: 'Goal', required: true, index: true },
-    groupId: { type: Schema.Types.ObjectId, ref: 'Group', required: true },
+    groupId: { type: Schema.Types.Mixed, required: true },
     userId: { type: Number, required: true },
     progress: { type: Number, default: 0, min: 0, max: 100 },
     note: { type: String, default: '', maxlength: 300 },
