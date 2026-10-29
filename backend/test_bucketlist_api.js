@@ -22,8 +22,12 @@
 'use strict';
 
 let BASE = 'http://localhost:5000/api';
-const USER1_HEADER = { 'x-dev-user-id': '1', 'Content-Type': 'application/json' };
-const USER2_HEADER = { 'x-dev-user-id': '2', 'Content-Type': 'application/json' };
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret';
+const token1 = jwt.sign({ id: 1, name: 'Alex Rivero', email: 'alex@lifequest.app' }, JWT_SECRET);
+const token2 = jwt.sign({ id: 2, name: 'Priya Sharma', email: 'priya@lifequest.app' }, JWT_SECRET);
+const USER1_HEADER = { 'Authorization': `Bearer ${token1}`, 'Content-Type': 'application/json' };
+const USER2_HEADER = { 'Authorization': `Bearer ${token2}`, 'Content-Type': 'application/json' };
 let serverInstance = null;
 
 let passed = 0;
@@ -353,7 +357,7 @@ async function run() {
   {
     const options = {
       method: 'POST',
-      headers: { 'x-dev-user-id': '1' },
+      headers: { 'Authorization': `Bearer ${token1}` },
       body: JSON.stringify({
         title: 'Browser Simulated Personal Goal',
         description: 'Verifies Content-Type: application/json is present',
@@ -380,16 +384,25 @@ async function run() {
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Results: ${passed} passed, ${failed} failed`);
   if (serverInstance) serverInstance.close();
+  const mongoose = require('mongoose');
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect().catch(() => {});
+  }
   if (failed > 0) {
     console.error('❌ Some tests failed. See details above.');
-    process.exitCode = 1;
+    process.exit(1);
   } else {
     console.log('✅ All tests passed!');
+    process.exit(0);
   }
 }
 
-run().catch((err) => {
+run().catch(async (err) => {
   console.error('Test runner error:', err.message);
   if (serverInstance) serverInstance.close();
-  process.exitCode = 1;
+  const mongoose = require('mongoose');
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect().catch(() => {});
+  }
+  process.exit(1);
 });

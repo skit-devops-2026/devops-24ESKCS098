@@ -7,9 +7,14 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "db:seed": "node src/db/seed.js",
-    "test": "node test_bucketlist_api.js"
+    "test": "node test_auth_api.js && node test_bucketlist_api.js && node test_group_isolation_api.js && node test_connected_features.js",
+    "test:auth": "node test_auth_api.js",
+    "test:bucketlist": "node test_bucketlist_api.js",
+    "test:isolation": "node test_group_isolation_api.js",
+    "test:connected": "node test_connected_features.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

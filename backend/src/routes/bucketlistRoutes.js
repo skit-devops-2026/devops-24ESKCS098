@@ -2,15 +2,15 @@
 
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/auth');
+const { auth, optionalAuth } = require('../middleware/auth');
 const ctrl = require('../controllers/bucketlistController');
 
-// All bucketlist routes require authentication (JWT or dev fallback)
-router.use(authMiddleware);
-
-// ── Overall Stats ─────────────────────────────────────────────────────────────
+// ── Overall Stats (Public + Authenticated) ──────────────────────────────────
 // GET    /api/bucketlist/stats              – get overall bucketlist stats
-router.get('/stats', ctrl.getBucketlistStats);
+router.get('/stats', optionalAuth, ctrl.getBucketlistStats);
+
+// All subsequent bucketlist routes require authentication
+router.use(auth);
 
 // ── Personal Goals ────────────────────────────────────────────────────────────
 // GET    /api/bucketlist/goals              – list personal goals (filter by ?status=&category=)

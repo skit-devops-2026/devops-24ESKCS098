@@ -48,6 +48,9 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad, onJoinSquad }) {
 
   // Step 2 generated code
   const [joinCode, setJoinCode] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState(null);
+  const [createdSquad, setCreatedSquad] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -57,6 +60,9 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad, onJoinSquad }) {
       setStep(1);
       setEnterJoinCode('');
       setJoinError(null);
+      setCreateError(null);
+      setCreateLoading(false);
+      setCreatedSquad(null);
       setCopiedCode(false);
       setCopiedLink(false);
       // Generate a cool join code like LQ-8492
@@ -78,10 +84,32 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad, onJoinSquad }) {
 
   if (!isOpen) return null;
 
-  const handleNextStep = (e) => {
+  const handleNextStep = async (e) => {
     e.preventDefault();
     if (!squadName.trim()) return;
-    setStep(2);
+    setCreateLoading(true);
+    setCreateError(null);
+    try {
+      if (onCreateSquad) {
+        const res = await onCreateSquad({
+          name: squadName.trim(),
+          description: description.trim(),
+          joinCode,
+          category,
+          coverUrl: selectedCover,
+          isPrivate,
+        });
+        if (res && (res.joinCode || res.join_code)) {
+          setJoinCode(res.joinCode || res.join_code);
+          setCreatedSquad(res);
+        }
+      }
+      setStep(2);
+    } catch (err) {
+      setCreateError(err.message || 'Failed to create squad. Please try again.');
+    } finally {
+      setCreateLoading(false);
+    }
   };
 
   const handleCopyCode = () => {
@@ -97,13 +125,6 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad, onJoinSquad }) {
   };
 
   const handleFinish = () => {
-    if (onCreateSquad) {
-      // Pass only name + description — the backend generates join_code, id, etc.
-      onCreateSquad({
-        name: squadName,
-        description,
-      });
-    }
     onClose();
   };
 
@@ -380,11 +401,17 @@ function CreateSquadModal({ isOpen, onClose, onCreateSquad, onJoinSquad }) {
             </div>
 
             {/* Action */}
+            {createError && (
+              <p className="text-xs font-mono text-red-600 font-bold bg-red-50 p-2.5 rounded border border-red-200">
+                ⚠️ {createError}
+              </p>
+            )}
             <button
               type="submit"
-              className="w-full py-3 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 text-black font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all flex items-center justify-center gap-2"
+              disabled={createLoading || !squadName.trim()}
+              className="w-full py-3 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 text-black font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>Next: Generate Boarding Pass ➔</span>
+              <span>{createLoading ? 'Creating Squad & Generating Pass...' : 'Next: Generate Boarding Pass ➔'}</span>
             </button>
           </form>
         )}

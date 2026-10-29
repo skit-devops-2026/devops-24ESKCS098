@@ -8,6 +8,7 @@ const trophyRoomRoutes = require('./routes/trophyRoomRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const bucketlistRoutes = require('./routes/bucketlistRoutes');
+const authRoutes = require('./routes/authRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();

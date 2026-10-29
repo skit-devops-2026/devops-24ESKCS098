@@ -21,23 +21,33 @@ async function getLeaderboard(req, res, next) {
     if (isMongoConnected()) {
       const periodStart = getPeriodStartDate(period);
 
+<<<<<<< HEAD
       // Find user's squads or default squads for guests
       const userGroups = userId
         ? await Group.find({ 'members.user_id': userId }).lean()
         : await Group.find({}).lean();
       let targetGroupIds = userGroups.map((g) => g.id);
+=======
+      // Find relevant squads: if userId is present, find user's squads; otherwise find public/recent squads
+      const groupFilter = userId
+        ? { $or: [{ 'members.user_id': userId }, { 'members.userId': userId }] }
+        : {};
+      const userGroups = await Group.find(groupFilter).limit(20).lean();
+      let targetGroupIds = userGroups.map((g) => g.id || g._id);
+>>>>>>> main
       if (groupId) {
-        targetGroupIds = targetGroupIds.filter((id) => id === groupId);
+        targetGroupIds = targetGroupIds.filter((id) => String(id) === String(groupId));
       }
 
       // Member registry: `${userId}_${groupId}`
       const memberSet = new Map();
       targetGroupIds.forEach((gid) => {
-        const grp = userGroups.find((g) => g.id === gid);
+        const grp = userGroups.find((g) => (g.id || g._id) === gid);
         if (grp && grp.members) {
           grp.members.forEach((m) => {
-            memberSet.set(`${m.user_id}_${gid}`, {
-              userId: m.user_id,
+            const mUid = m.user_id ?? m.userId;
+            memberSet.set(`${mUid}_${gid}`, {
+              userId: mUid,
               groupId: gid,
               squadName: grp.name,
             });
@@ -125,6 +135,20 @@ async function getLeaderboard(req, res, next) {
         };
       });
 
+      if (scores.length === 0) {
+        const fallbackUsers = await User.find({}).limit(10).lean();
+        const baseXP = [2250, 1950, 1800, 1550, 1400, 1200, 1050];
+        scores = fallbackUsers.map((u, idx) => ({
+          id: u.id || u._id,
+          name: u.name,
+          avatar_url: u.avatar_url,
+          squad_name: 'Trip Squad ✈️',
+          xp: u.xp || baseXP[idx % baseXP.length] || 1000,
+          completed_quests: 4 + (idx % 3),
+          first_completed: null,
+        }));
+      }
+
       scores.sort((a, b) => {
         if (b.xp !== a.xp) return b.xp - a.xp;
         if (a.first_completed && b.first_completed) {
@@ -149,7 +173,7 @@ async function getLeaderboard(req, res, next) {
           completedQuests: r.completed_quests,
           badge: rank === 1 ? '🚀 Most Adventurous' : rank === 2 ? '⚡ First to Finish' : '🔥 Streak Titan',
           streak: `${Math.min(8, Math.max(2, r.completed_quests))}w 🔥`,
-          isCurrentUser: r.id === userId,
+          isCurrentUser: Boolean(userId && (r.id === userId || String(r.id) === String(userId))),
           avatar: r.avatar_url,
         };
       });
@@ -161,7 +185,21 @@ async function getLeaderboard(req, res, next) {
       }
 
       const topRankings = allRankings.slice(0, limit);
+<<<<<<< HEAD
       const myRow = userId ? allRankings.find((r) => r.isCurrentUser) : null;
+=======
+      const myRow = userId
+        ? (allRankings.find((r) => r.isCurrentUser) || {
+            rank: allRankings.length + 1,
+            xp: 0,
+            name: req.user?.name || 'You',
+          })
+        : {
+            rank: '-',
+            xp: 0,
+            name: 'Guest Quester',
+          };
+>>>>>>> main
 
       return res.json({
         success: true,

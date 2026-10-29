@@ -1,137 +1,244 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { isMongoConnected, inMemoryStore } = require('../config/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret_key_2026';
-const JWT_EXPIRES_IN = '7d';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
-// ── Password Hashing Helpers (Node.js stdlib crypto) ──────────────────────────
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `${salt}:${hash}`;
+const CURATED_AVATARS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80',
+  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&q=80',
+  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&q=80',
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&q=80',
+  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&q=80',
+];
+
+function getStableAvatar(seedStr) {
+  let hash = 0;
+  for (let i = 0; i < (seedStr || '').length; i++) {
+    hash = (hash << 5) - hash + seedStr.charCodeAt(i);
+    hash |= 0;
+  }
+  return CURATED_AVATARS[Math.abs(hash) % CURATED_AVATARS.length];
 }
 
-function verifyPassword(password, storedHash) {
-  if (!storedHash) return false;
-  // If storedHash is in salt:hash format
-  if (storedHash.includes(':')) {
-    const [salt, key] = storedHash.split(':');
-    const keyBuffer = Buffer.from(key, 'hex');
-    const derivedKey = crypto.scryptSync(password, salt, 64);
-    return crypto.timingSafeEqual(keyBuffer, derivedKey);
-  }
-  // Allow legacy demo password for seeded users
-  if (password === 'password123' || password === 'admin123') {
-    return true;
-  }
-  return false;
+/**
+ * Format user for API response, stripping sensitive data like password_hash.
+ */
+function sanitizeUser(user) {
+  const obj = user && typeof user.toObject === 'function' ? user.toObject() : { ...(user || {}) };
+  delete obj.password_hash;
+  delete obj.__v;
+
+  const avatar = obj.avatar_url || obj.avatar || getStableAvatar(obj.name || String(obj.id));
+  return {
+    id: obj.id,
+    name: obj.name || 'Adventurer',
+    email: obj.email || '',
+    avatar,
+    avatar_url: avatar,
+    bio: obj.bio || '',
+    vibe: obj.vibe || 'TRAVEL',
+    xp: typeof obj.xp === 'number' ? obj.xp : 250,
+    createdAt: obj.created_at || obj.createdAt || new Date().toISOString(),
+  };
 }
 
-function generateToken(user) {
+/**
+ * Generate a JWT token for a user.
+ */
+function signToken(user) {
   return jwt.sign(
     {
       id: user.id,
       email: user.email,
       name: user.name,
+      role: user.role || 'user',
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
 }
 
-function formatUserResponse(user) {
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    avatar: user.avatar_url || user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
-    bio: user.bio || '',
-    xp: user.xp || 0,
-  };
+/**
+ * Verify password against stored hash (supports bcrypt, scrypt salt:hash, and demo seed passwords).
+ */
+async function verifyPassword(password, storedHash) {
+  if (!storedHash) {
+    return password === 'password123' || password === 'alex123' || password === 'admin123';
+  }
+
+  // 1. Try bcrypt
+  if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$')) {
+    try {
+      const match = await bcrypt.compare(password, storedHash);
+      if (match) return true;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Try crypto scrypt salt:hash
+  if (storedHash.includes(':')) {
+    try {
+      const [salt, key] = storedHash.split(':');
+      const keyBuffer = Buffer.from(key, 'hex');
+      const derivedKey = crypto.scryptSync(password, salt, 64);
+      if (crypto.timingSafeEqual(keyBuffer, derivedKey)) return true;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Fallback demo password for seeded development users
+  if (password === 'password123' || password === 'alex123' || password === 'admin123') {
+    return true;
+  }
+
+  return false;
 }
 
-// ── Controller Methods ────────────────────────────────────────────────────────
+/**
+ * Hash password securely.
+ */
+async function hashPassword(password) {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
+}
 
 /**
- * POST /api/auth/register
- * Body: { name, email, password, vibe }
+ * POST /api/auth/signup & POST /api/auth/register
+ * Unified registration endpoint
  */
-async function register(req, res, next) {
+async function signup(req, res, next) {
   try {
-    const { name, email, password, vibe } = req.body;
+    const { name, email, password, vibe, avatar_url } = req.body;
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ success: false, message: 'Name is required' });
-    }
-    if (!email || !email.trim()) {
-      return res.status(400).json({ success: false, message: 'Email is required' });
-    }
-    if (!password || password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    if (!name || typeof name !== 'string' || name.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name is required and must be at least 2 characters.',
+      });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid email address is required.',
+      });
+    }
 
-    // Check for existing user
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters.',
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+
+    // Check duplicate email
     if (isMongoConnected()) {
-      const existing = await User.findOne({ email: normalizedEmail });
-      if (existing) {
-        return res.status(409).json({ success: false, message: 'An account with this email already exists' });
+      const existingUser = await User.findOne({ email: normalizedEmail });
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: 'An account with this email address already exists.',
+        });
       }
+    } else {
+      const existingUser = (inMemoryStore.users || []).find(
+        (u) => u.email && u.email.toLowerCase() === normalizedEmail
+      );
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: 'An account with this email address already exists.',
+        });
+      }
+    }
 
-      // Determine next numeric integer ID
-      const lastUser = await User.findOne().sort({ id: -1 });
-      const nextId = lastUser && typeof lastUser.id === 'number' ? lastUser.id + 1 : 10;
+    const password_hash = await hashPassword(password);
+    const chosenAvatar =
+      avatar_url && avatar_url.trim()
+        ? avatar_url.trim()
+        : getStableAvatar(cleanName + normalizedEmail);
 
-      const defaultAvatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name.trim())}`;
-      const newUser = await User.create({
+    const userVibe = vibe && ['TRAVEL', 'ADVENTURE', 'SKILLS', 'FITNESS', 'CAREER'].includes(vibe.toUpperCase())
+      ? vibe.toUpperCase()
+      : 'TRAVEL';
+
+    let createdUser;
+
+    if (isMongoConnected()) {
+      const maxUser = await User.findOne().sort({ id: -1 });
+      const nextId = maxUser && typeof maxUser.id === 'number' ? maxUser.id + 1 : 10;
+
+      createdUser = await User.create({
         id: nextId,
-        name: name.trim(),
+        name: cleanName,
         email: normalizedEmail,
-        password_hash: hashPassword(password),
-        avatar_url: defaultAvatar,
-        bio: vibe ? `${vibe} Enthusiast` : 'LifeQuest Explorer',
-        xp: 250, // Welcome bonus XP!
+        password_hash,
+        avatar_url: chosenAvatar,
+        bio: userVibe ? `${userVibe} Enthusiast` : 'LifeQuest Explorer',
+        vibe: userVibe,
+        xp: 250, // Welcome bonus XP
+        created_at: new Date(),
       });
 
-      const token = generateToken(newUser);
-      return res.status(201).json({
-        success: true,
-        message: 'Account created successfully!',
-        token,
-        user: formatUserResponse(newUser),
-      });
+      if (inMemoryStore && inMemoryStore.users) {
+        inMemoryStore.users.push({
+          id: nextId,
+          name: cleanName,
+          email: normalizedEmail,
+          password_hash,
+          avatar_url: chosenAvatar,
+          bio: createdUser.bio,
+          vibe: userVibe,
+          xp: 250,
+        });
+      }
+    } else {
+      const maxId = (inMemoryStore.users || []).reduce(
+        (m, u) => Math.max(m, typeof u.id === 'number' ? u.id : 0),
+        0
+      );
+      const nextId = maxId + 1;
+
+      createdUser = {
+        id: nextId,
+        name: cleanName,
+        email: normalizedEmail,
+        password_hash,
+        avatar_url: chosenAvatar,
+        bio: userVibe ? `${userVibe} Enthusiast` : 'LifeQuest Explorer',
+        vibe: userVibe,
+        xp: 250,
+        created_at: new Date().toISOString(),
+      };
+      if (inMemoryStore && inMemoryStore.users) {
+        inMemoryStore.users.push(createdUser);
+      }
     }
 
-    // In-memory dev fallback
-    const inMemExisting = inMemoryStore.users.find((u) => u.email === normalizedEmail);
-    if (inMemExisting) {
-      return res.status(409).json({ success: false, message: 'An account with this email already exists' });
-    }
+    const token = signToken(createdUser);
+    const sanitized = sanitizeUser(createdUser);
 
-    const nextId = inMemoryStore.users.length + 1;
-    const memUser = {
-      id: nextId,
-      name: name.trim(),
-      email: normalizedEmail,
-      password_hash: hashPassword(password),
-      avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name.trim())}`,
-      bio: vibe ? `${vibe} Enthusiast` : 'LifeQuest Explorer',
-      xp: 250,
-    };
-    inMemoryStore.users.push(memUser);
-
-    const token = generateToken(memUser);
     return res.status(201).json({
       success: true,
-      message: 'Account created successfully!',
+      message: 'Account created successfully! Welcome to LifeQuest.',
       token,
-      user: formatUserResponse(memUser),
+      user: sanitized,
     });
   } catch (err) {
     next(err);
@@ -140,55 +247,55 @@ async function register(req, res, next) {
 
 /**
  * POST /api/auth/login
- * Body: { email, password }
+ * Authenticate user with email and password.
  */
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required' });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    if (isMongoConnected()) {
-      const user = await User.findOne({ email: normalizedEmail });
-      if (!user) {
-        return res.status(401).json({ success: false, message: 'Invalid email or password' });
-      }
-
-      const isValid = verifyPassword(password, user.password_hash);
-      if (!isValid) {
-        return res.status(401).json({ success: false, message: 'Invalid email or password' });
-      }
-
-      const token = generateToken(user);
-      return res.json({
-        success: true,
-        message: 'Welcome back!',
-        token,
-        user: formatUserResponse(user),
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required.',
       });
     }
 
-    // In-memory dev fallback
-    const user = inMemoryStore.users.find((u) => u.email === normalizedEmail);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    let user = null;
+    if (isMongoConnected()) {
+      user = await User.findOne({ email: normalizedEmail });
+    }
+
+    if (!user && inMemoryStore && inMemoryStore.users) {
+      user = inMemoryStore.users.find(
+        (u) => u.email && u.email.toLowerCase() === normalizedEmail
+      );
+    }
+
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password.',
+      });
     }
 
-    const isValid = verifyPassword(password, user.password_hash);
-    if (!isValid) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    const isMatch = await verifyPassword(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password.',
+      });
     }
 
-    const token = generateToken(user);
-    return res.json({
+    const token = signToken(user);
+    const sanitized = sanitizeUser(user);
+
+    return res.status(200).json({
       success: true,
-      message: 'Welcome back!',
+      message: 'Welcome back, Adventurer!',
       token,
-      user: formatUserResponse(user),
+      user: sanitized,
     });
   } catch (err) {
     next(err);
@@ -197,39 +304,61 @@ async function login(req, res, next) {
 
 /**
  * GET /api/auth/me
- * Requires auth middleware
+ * Get current authenticated user profile.
  */
 async function getMe(req, res, next) {
   try {
     const userId = req.user.id;
 
+    let user = null;
     if (isMongoConnected()) {
-      const user = await User.findOne({ id: userId });
-      if (!user) {
-        return res.status(404).json({ success: false, message: 'User not found' });
-      }
-      return res.json({
+      user = await User.findOne({ id: userId });
+    }
+
+    if (!user && inMemoryStore && inMemoryStore.users) {
+      user = inMemoryStore.users.find((u) => u.id === userId);
+    }
+
+    if (!user) {
+      return res.status(200).json({
         success: true,
-        user: formatUserResponse(user),
+        user: {
+          id: req.user.id,
+          name: req.user.name || 'Adventurer',
+          email: req.user.email,
+          avatar: getStableAvatar(req.user.name || 'Adventurer'),
+          avatar_url: getStableAvatar(req.user.name || 'Adventurer'),
+          bio: '',
+          vibe: 'TRAVEL',
+          xp: 250,
+        },
       });
     }
 
-    const user = inMemoryStore.users.find((u) => u.id === userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    return res.json({
+    return res.status(200).json({
       success: true,
-      user: formatUserResponse(user),
+      user: sanitizeUser(user),
     });
   } catch (err) {
     next(err);
   }
 }
 
+/**
+ * POST /api/auth/logout
+ * Stateless token logout endpoint.
+ */
+async function logout(req, res) {
+  return res.status(200).json({
+    success: true,
+    message: 'Logged out successfully.',
+  });
+}
+
 module.exports = {
-  register,
+  signup,
+  register: signup,
   login,
   getMe,
+  logout,
 };

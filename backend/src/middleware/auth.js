@@ -5,10 +5,9 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret_key_2026';
 
 /**
- * Mandatory Authentication Middleware
- * Requires either:
- *   1. Authorization: Bearer <valid_jwt>
- *   2. Explicit x-dev-user-id header (for automated CLI smoke tests)
+ * Authentication Middleware:
+ * Verifies JWT Bearer tokens on protected API routes and derives
+ * authenticated user ID from the verified token.
  * Rejects unauthenticated requests with 401.
  */
 function authMiddleware(req, res, next) {
@@ -16,16 +15,25 @@ function authMiddleware(req, res, next) {
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Authorization token required' });
+    }
+
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = decoded;
+      req.user = {
+        id: decoded.id,
+        email: decoded.email,
+        name: decoded.name,
+        role: decoded.role || 'user',
+      };
       return next();
     } catch (err) {
       return res.status(401).json({ success: false, message: 'Invalid or expired token' });
     }
   }
 
-  // Explicit dev testing header only (does NOT blindly hijack anonymous requests)
+  // Explicit dev testing header only (for CLI test suites)
   if (req.headers['x-dev-user-id']) {
     const devUserId = parseInt(req.headers['x-dev-user-id'], 10) || 1;
     req.user = {
@@ -52,14 +60,21 @@ function optionalAuth(req, res, next) {
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = decoded;
-      return next();
-    } catch {
-      // Ignore invalid token on optional routes; treat as guest
-      req.user = null;
-      return next();
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = {
+          id: decoded.id,
+          email: decoded.email,
+          name: decoded.name,
+          role: decoded.role || 'user',
+        };
+        return next();
+      } catch (err) {
+        // Soft fallback for optional routes: treat as guest
+        req.user = null;
+        return next();
+      }
     }
   }
 
@@ -78,5 +93,6 @@ function optionalAuth(req, res, next) {
 }
 
 module.exports = authMiddleware;
+module.exports.auth = authMiddleware;
 module.exports.authMiddleware = authMiddleware;
 module.exports.optionalAuth = optionalAuth;
