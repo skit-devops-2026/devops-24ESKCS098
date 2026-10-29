@@ -1,9 +1,10 @@
-const express = require('express');
+import express from 'express';
+import trophyRoomController from '../controllers/trophyRoomController.js';
+import { auth } from '../middleware/auth.js';
+
 const router = express.Router();
-const trophyRoomController = require('../controllers/trophyRoomController');
-const auth = require('../middleware/auth');
 
 // GET /api/trophy-room/me?category=
 router.get('/me', auth, trophyRoomController.getMyTrophyRoom);
 
-module.exports = router;
+export default router;

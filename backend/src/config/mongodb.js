@@ -1,4 +1,3 @@
-'use strict';
-
 // Compatibility shim mapping to unified db.js
-module.exports = require('./db');
+export * from './db.js';
+export { default } from './db.js';

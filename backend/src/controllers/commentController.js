@@ -1,5 +1,5 @@
-const { Comment, Post, User } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+import { Comment, Post, User } from '../models/index.js';
+import { isMongoConnected, inMemoryStore } from '../config/db.js';
 
 // GET /api/posts/:id/comments - List comments for a post
 async function getComments(req, res, next) {
@@ -193,7 +193,13 @@ async function deleteComment(req, res, next) {
   }
 }
 
-module.exports = {
+export {
+  getComments,
+  addComment,
+  deleteComment,
+};
+
+export default {
   getComments,
   addComment,
   deleteComment,

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const postSchema = new mongoose.Schema(
   {
@@ -30,7 +30,6 @@ postSchema.index({ group_id: 1, completed_at: -1 });
 postSchema.index({ author_id: 1, completed_at: -1 });
 postSchema.index({ completed_at: -1 });
 
-const Post = mongoose.models.Post || mongoose.model('Post', postSchema);
+export const Post = mongoose.models.Post || mongoose.model('Post', postSchema);
 
-module.exports = Post;
-
+export default Post;

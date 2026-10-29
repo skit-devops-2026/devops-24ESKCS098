@@ -1,15 +1,21 @@
-const mongoose = require('mongoose');
-const dns = require('dns');
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
-require('dotenv').config();
+import mongoose from 'mongoose';
+import dns from 'dns';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
 
 // Fix Windows DNS SRV lookup for MongoDB Atlas
 try {
   dns.setServers(['8.8.8.8', '1.1.1.1']);
 } catch (e) {}
 
-const { User, Group, Goal, Post, Comment, Reaction, Badge } = require('../models');
+import { User, Group, Goal, Post, Comment, Reaction, Badge } from '../models/index.js';
 
 const MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/lifequest';

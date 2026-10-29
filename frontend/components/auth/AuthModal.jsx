@@ -14,7 +14,6 @@ function AuthModal({ isOpen: propIsOpen, onClose: propOnClose, initialTab, onAut
   const [selectedVibe, setSelectedVibe] = useState('TRAVEL');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form states
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -29,7 +28,6 @@ function AuthModal({ isOpen: propIsOpen, onClose: propOnClose, initialTab, onAut
     setFeedback(null);
   }, [defaultTab, isOpen]);
 
-  // Handle Escape key
   useEffect(() => {
     function handleKeyDown(e) {
       if (e.key === 'Escape' && isOpen) {

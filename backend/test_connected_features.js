@@ -8,9 +8,9 @@
  */
 'use strict';
 
-const http = require('http');
-const mongoose = require('mongoose');
-const app = require('./src/app');
+import http from 'http';
+import mongoose from 'mongoose';
+import app from './src/app.js';
 
 let server;
 let baseUrl;

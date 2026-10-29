@@ -1,15 +1,18 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const authRoutes = require('./routes/authRoutes');
-const postRoutes = require('./routes/postRoutes');
-const leaderboardRoutes = require('./routes/leaderboardRoutes');
-const trophyRoomRoutes = require('./routes/trophyRoomRoutes');
-const uploadRoutes = require('./routes/uploadRoutes');
-const commentRoutes = require('./routes/commentRoutes');
-const bucketlistRoutes = require('./routes/bucketlistRoutes');
-const authRoutes = require('./routes/authRoutes');
-const errorHandler = require('./middleware/errorHandler');
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import authRoutes from './routes/authRoutes.js';
+import postRoutes from './routes/postRoutes.js';
+import leaderboardRoutes from './routes/leaderboardRoutes.js';
+import trophyRoomRoutes from './routes/trophyRoomRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
+import commentRoutes from './routes/commentRoutes.js';
+import bucketlistRoutes from './routes/bucketlistRoutes.js';
+import errorHandler from './middleware/errorHandler.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -68,5 +71,5 @@ app.use((req, res, next) => {
 // Central Error Handler
 app.use(errorHandler);
 
-module.exports = app;
-
+export { app };
+export default app;

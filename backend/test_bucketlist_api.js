@@ -21,8 +21,11 @@
  */
 'use strict';
 
+import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
+import app from './src/app.js';
+
 let BASE = 'http://localhost:5000/api';
-const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret';
 const token1 = jwt.sign({ id: 1, name: 'Alex Rivero', email: 'alex@lifequest.app' }, JWT_SECRET);
 const token2 = jwt.sign({ id: 2, name: 'Priya Sharma', email: 'priya@lifequest.app' }, JWT_SECRET);
@@ -68,7 +71,6 @@ async function run() {
     if (health.status === 'ok') console.log(`✓ Connected to backend at ${BASE}`);
   } catch {
     console.log('No backend at :5000; starting in-process server...');
-    const app = require('./src/app');
     await new Promise((resolve) => {
       serverInstance = app.listen(0, () => {
         const port = serverInstance.address().port;
@@ -384,7 +386,6 @@ async function run() {
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Results: ${passed} passed, ${failed} failed`);
   if (serverInstance) serverInstance.close();
-  const mongoose = require('mongoose');
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect().catch(() => {});
   }
@@ -400,7 +401,6 @@ async function run() {
 run().catch(async (err) => {
   console.error('Test runner error:', err.message);
   if (serverInstance) serverInstance.close();
-  const mongoose = require('mongoose');
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect().catch(() => {});
   }

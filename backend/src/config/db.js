@@ -1,10 +1,15 @@
-const mongoose = require('mongoose');
-const dns = require('dns');
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
-require('dotenv').config();
+import mongoose from 'mongoose';
+import dns from 'dns';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
-// Fix Windows DNS SRV lookup for MongoDB Atlas
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
+
+// Windows DNS SRV lookup workaround for MongoDB Atlas
 try {
   dns.setServers(['8.8.8.8', '1.1.1.1']);
 } catch (e) {}
@@ -202,7 +207,14 @@ const inMemoryStore = {
   ]
 };
 
-module.exports = {
+export {
+  mongoose,
+  connectMongo,
+  isMongoConnected,
+  inMemoryStore,
+};
+
+export default {
   mongoose,
   connectMongo,
   isMongoConnected,

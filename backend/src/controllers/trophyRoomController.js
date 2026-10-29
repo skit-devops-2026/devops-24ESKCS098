@@ -1,5 +1,5 @@
-const { Post, Group, Badge, User } = require('../models');
-const { isMongoConnected, inMemoryStore } = require('../config/db');
+import { Post, Group, Badge, User } from '../models/index.js';
+import { isMongoConnected, inMemoryStore } from '../config/db.js';
 
 // Alex Rivero's Lifetime Conquests fallback presets
 const ALEX_LIFETIME_CONQUESTS = [
@@ -251,6 +251,10 @@ async function getMyTrophyRoom(req, res, next) {
   }
 }
 
-module.exports = {
+export {
+  getMyTrophyRoom,
+};
+
+export default {
   getMyTrophyRoom,
 };

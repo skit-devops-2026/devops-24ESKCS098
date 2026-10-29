@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const reactionSchema = new mongoose.Schema(
   {
@@ -19,10 +19,9 @@ const reactionSchema = new mongoose.Schema(
   }
 );
 
-// Unique composite constraint: 1 reaction per user per post
+// 1 reaction per user per post
 reactionSchema.index({ post_id: 1, user_id: 1 }, { unique: true });
 
-const Reaction = mongoose.models.Reaction || mongoose.model('Reaction', reactionSchema);
+export const Reaction = mongoose.models.Reaction || mongoose.model('Reaction', reactionSchema);
 
-module.exports = Reaction;
-
+export default Reaction;

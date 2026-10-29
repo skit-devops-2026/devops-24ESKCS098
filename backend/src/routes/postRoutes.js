@@ -1,25 +1,28 @@
-const express = require('express');
-const router = express.Router();
-const postController = require('../controllers/postController');
-const reactionController = require('../controllers/reactionController');
-const commentController = require('../controllers/commentController');
-const { auth, authMiddleware, optionalAuth } = require('../middleware/auth');
+'use strict';
 
-// Posts Feed & Stats (Public / Guest readable with optionalAuth)
+import express from 'express';
+import postController from '../controllers/postController.js';
+import reactionController from '../controllers/reactionController.js';
+import commentController from '../controllers/commentController.js';
+import { auth, optionalAuth } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// Public feed and community stats
 router.get('/', optionalAuth, postController.getFeed);
 router.get('/stats/weekly', optionalAuth, postController.getWeeklyStats);
 
-// Write actions require full authentication
+// Post creation, privacy updates, and deletions
 router.post('/', auth, postController.createPost);
 router.patch('/:id/visibility', auth, postController.updateVisibility);
 router.delete('/:id', auth, postController.deletePost);
 
-// Post Reactions (/api/posts/:id/reaction)
+// Post reactions
 router.put('/:id/reaction', auth, reactionController.upsertReaction);
 router.delete('/:id/reaction', auth, reactionController.deleteReaction);
 
-// Post Comments (/api/posts/:id/comments)
+// Comments
 router.get('/:id/comments', optionalAuth, commentController.getComments);
 router.post('/:id/comments', auth, commentController.addComment);
 
-module.exports = router;
+export default router;

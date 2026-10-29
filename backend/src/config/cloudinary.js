@@ -1,4 +1,4 @@
-const cloudinary = require('cloudinary').v2;
+import { v2 as cloudinary } from 'cloudinary';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'demo',
@@ -6,7 +6,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET || 'abcdef123456',
 });
 
-async function uploadToCloudinary(buffer, mimeType = 'image/jpeg') {
+export async function uploadToCloudinary(buffer, mimeType = 'image/jpeg') {
   // If demo credentials, fallback gracefully to a data URL so development never fails
   if (!process.env.CLOUDINARY_API_KEY || process.env.CLOUDINARY_API_KEY === '123456789') {
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
@@ -24,4 +24,5 @@ async function uploadToCloudinary(buffer, mimeType = 'image/jpeg') {
   });
 }
 
-module.exports = { cloudinary, uploadToCloudinary };
+export { cloudinary };
+export default { cloudinary, uploadToCloudinary };

@@ -1,5 +1,5 @@
 // Automated test runner for LifeQuest backend endpoints
-const http = require('http');
+import http from 'http';
 
 function request(method, path, data = null) {
   return new Promise((resolve, reject) => {

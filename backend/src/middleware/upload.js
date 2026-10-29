@@ -1,4 +1,4 @@
-const multer = require('multer');
+import multer from 'multer';
 
 // Store in memory buffer so we can either stream to Cloudinary or write to disk/base64
 const storage = multer.memoryStorage();
@@ -17,4 +17,5 @@ const upload = multer({
   fileFilter,
 });
 
-module.exports = upload;
+export { upload };
+export default upload;

@@ -61,15 +61,8 @@ const INITIAL_MEMBERS = [
 const DEFAULT_COVER = 'https://images.unsplash.com/photo-1528127269322-539801943592?w=1200&q=80';
 
 /**
- * Step 10: SquadMembersWidget (Item 4 from Stitch Design System)
- *
- * Full Neo-Brutalist squad management widget with:
- *   - Customizable squad cover photo & motto banner
- *   - Squad stats ribbon (members, completed quests, total XP)
- *   - Member roster with ADMIN / MEMBER badges, activity notes, and XP tally
- *   - Role toggling (promote to Admin / set as Member)
- *   - Invite modal / copy join code action
- *   - Leave squad action with confirmation dialog
+ * Squad roster widget displaying member activity, roles, contribution totals,
+ * and invite actions for collaborative questing groups.
  */
 function SquadMembersWidget({
   squadName = 'Trip Squad ✈️',
