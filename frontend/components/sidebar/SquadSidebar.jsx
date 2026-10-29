@@ -1,42 +1,11 @@
 import { useState } from 'react';
 
-const SQUADS = [
-  {
-    id: 'trip-squad',
-    name: 'Trip Squad ✈️',
-    members: 6,
-    activeQuests: 12,
-    unreadCount: 3,
-    avatar: 'https://images.unsplash.com/photo-1528127269322-539801943592?w=150&q=80',
-    bgColor: 'bg-brand-pink',
-  },
-  {
-    id: 'college-gang',
-    name: 'College Gang 🎓',
-    members: 4,
-    activeQuests: 5,
-    unreadCount: 1,
-    avatar: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=150&q=80',
-    bgColor: 'bg-brand-cyan',
-  },
-  {
-    id: 'family-adventure',
-    name: 'Family Adventure 🏡',
-    members: 5,
-    activeQuests: 8,
-    unreadCount: 0,
-    avatar: null,
-    icon: '🏡',
-    bgColor: 'bg-brand-lime',
-  },
-];
-
 const CATEGORIES = [
-  { id: 'TRAVEL', label: 'Travel', emoji: '✈️', count: 8, color: 'bg-brand-pink text-white', rotate: '-rotate-1' },
-  { id: 'ADVENTURE', label: 'Adventure', emoji: '🧗', count: 5, color: 'bg-brand-yellow text-black', rotate: 'rotate-1' },
-  { id: 'SKILLS', label: 'Skills', emoji: '🎸', count: 4, color: 'bg-brand-cyan text-black', rotate: '-rotate-2' },
-  { id: 'FITNESS', label: 'Fitness', emoji: '🏃', count: 9, color: 'bg-brand-lime text-black', rotate: 'rotate-2' },
-  { id: 'CAREER', label: 'Career', emoji: '💼', count: 2, color: 'bg-brand-purple text-black', rotate: '-rotate-1' },
+  { id: 'TRAVEL', label: 'Travel', emoji: '✈️', color: 'bg-brand-pink text-white', rotate: '-rotate-1' },
+  { id: 'ADVENTURE', label: 'Adventure', emoji: '🧗', color: 'bg-brand-yellow text-black', rotate: 'rotate-1' },
+  { id: 'SKILLS', label: 'Skills', emoji: '🎸', color: 'bg-brand-cyan text-black', rotate: '-rotate-2' },
+  { id: 'FITNESS', label: 'Fitness', emoji: '🏃', color: 'bg-brand-lime text-black', rotate: 'rotate-2' },
+  { id: 'CAREER', label: 'Career', emoji: '💼', color: 'bg-brand-purple text-black', rotate: '-rotate-1' },
 ];
 
 const SQUAD_BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
@@ -49,7 +18,17 @@ const getSquadDisplayIcon = (squad) => {
   return squad.name.trim().charAt(0).toUpperCase();
 };
 
-function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectSquad, selectedCategory = null, onSelectCategory, onAddGroupClick }) {
+function SquadSidebar({
+  squads = [],
+  activeSquadId,
+  onSelectSquad,
+  selectedCategory = null,
+  onSelectCategory,
+  onAddGroupClick,
+  categoryCounts = {},
+  streak = 0,
+  unlockedBadges = null,
+}) {
   const [localSquad, setLocalSquad] = useState(activeSquadId);
   const [localCategory, setLocalCategory] = useState(selectedCategory);
   const [failedAvatars, setFailedAvatars] = useState({});
@@ -87,54 +66,67 @@ function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectS
 
       {/* Squad Cards */}
       <div className="space-y-2.5">
-        {squads.map((squad) => {
-          const isActive = currentSquad === squad.id;
-          const fallbackBg = SQUAD_BG_COLORS[Math.abs((squad.id || squad.name || '').length) % SQUAD_BG_COLORS.length];
-          const hasImage = squad.avatar && !failedAvatars[squad.id];
-
-          return (
-            <div
-              key={squad.id}
-              onClick={() => handleSquadClick(squad.id)}
-              className={`p-3 brutal-border-sm rounded-lg shadow-brutal-sm flex items-center justify-between cursor-pointer transition-all duration-200 ${
-                isActive
-                  ? 'bg-brand-yellow shadow-brutal'
-                  : 'bg-white hover:bg-neutral-50 hover:translate-x-0.5'
-              }`}
+        {squads.length === 0 ? (
+          <div className="p-4 bg-neutral-50 brutal-border-sm rounded-lg text-center space-y-2">
+            <p className="font-mono text-xs text-neutral-600 font-medium">No squads joined yet.</p>
+            <button
+              type="button"
+              onClick={onAddGroupClick}
+              className="text-xs font-mono font-black text-brand-pink underline hover:text-black cursor-pointer"
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full brutal-border-sm ${squad.bgColor || fallbackBg} flex items-center justify-center text-black font-black text-sm overflow-hidden shrink-0`}>
-                  {hasImage ? (
-                    <img
-                      alt={squad.name}
-                      className="w-full h-full object-cover"
-                      src={squad.avatar}
-                      onError={() => setFailedAvatars((prev) => ({ ...prev, [squad.id]: true }))}
-                    />
-                  ) : (
-                    <span className="text-base select-none leading-none">
-                      {getSquadDisplayIcon(squad)}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <div className="font-display font-black text-sm leading-tight">{squad.name}</div>
-                  <div className="font-mono text-[11px] text-neutral-700">
-                    {squad.members} Members • {squad.activeQuests} Active
+              + Create or join your first squad
+            </button>
+          </div>
+        ) : (
+          squads.map((squad) => {
+            const isActive = currentSquad === squad.id;
+            const fallbackBg = SQUAD_BG_COLORS[Math.abs((squad.id || squad.name || '').length) % SQUAD_BG_COLORS.length];
+            const hasImage = squad.avatar && !failedAvatars[squad.id];
+
+            return (
+              <div
+                key={squad.id}
+                onClick={() => handleSquadClick(squad.id)}
+                className={`p-3 brutal-border-sm rounded-lg shadow-brutal-sm flex items-center justify-between cursor-pointer transition-all duration-200 ${
+                  isActive
+                    ? 'bg-brand-yellow shadow-brutal'
+                    : 'bg-white hover:bg-neutral-50 hover:translate-x-0.5'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full brutal-border-sm ${squad.bgColor || fallbackBg} flex items-center justify-center text-black font-black text-sm overflow-hidden shrink-0`}>
+                    {hasImage ? (
+                      <img
+                        alt={squad.name}
+                        className="w-full h-full object-cover"
+                        src={squad.avatar}
+                        onError={() => setFailedAvatars((prev) => ({ ...prev, [squad.id]: true }))}
+                      />
+                    ) : (
+                      <span className="text-base select-none leading-none">
+                        {getSquadDisplayIcon(squad)}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-display font-black text-sm leading-tight">{squad.name}</div>
+                    <div className="font-mono text-[11px] text-neutral-700">
+                      {squad.members} Members • {squad.activeQuests} Active
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {squad.unreadCount > 0 && (
-                <span className={`w-6 h-6 rounded-full brutal-border-sm font-mono text-xs font-black flex items-center justify-center shrink-0 ${
-                  isActive ? 'bg-brand-pink text-white' : 'bg-brand-yellow text-black'
-                }`}>
-                  {squad.unreadCount}
-                </span>
-              )}
-            </div>
-          );
-        })}
+                {squad.unreadCount > 0 && (
+                  <span className={`w-6 h-6 rounded-full brutal-border-sm font-mono text-xs font-black flex items-center justify-center shrink-0 ${
+                    isActive ? 'bg-brand-pink text-white' : 'bg-brand-yellow text-black'
+                  }`}>
+                    {squad.unreadCount}
+                  </span>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Category Filter */}
@@ -155,19 +147,22 @@ function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectS
         <div className="flex flex-wrap gap-2">
           {CATEGORIES.map((cat) => {
             const isSelected = activeCategory === cat.id;
+            const count = categoryCounts[cat.id];
             return (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => handleCategoryClick(cat.id)}
-                className={`px-3 py-1.5 rounded-full brutal-border-sm text-xs font-mono font-bold shadow-brutal-sm flex items-center gap-1.5 hover:scale-105 transition-transform ${
+                className={`px-3 py-1.5 rounded-full brutal-border-sm text-xs font-mono font-bold shadow-brutal-sm flex items-center gap-1.5 hover:scale-105 transition-transform cursor-pointer ${
                   isSelected ? 'bg-black text-white ring-2 ring-brand-yellow' : `${cat.color} ${cat.rotate}`
                 }`}
               >
                 <span>{cat.emoji} {cat.label}</span>
-                <span className={`px-1.5 rounded-full text-[10px] ${isSelected ? 'bg-white text-black font-black' : 'bg-black text-white'}`}>
-                  {cat.count}
-                </span>
+                {count != null && (
+                  <span className={`px-1.5 rounded-full text-[10px] ${isSelected ? 'bg-white text-black font-black' : 'bg-black text-white'}`}>
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -178,12 +173,14 @@ function SquadSidebar({ squads = SQUADS, activeSquadId = 'trip-squad', onSelectS
       <div className="p-3 bg-brand-canvas brutal-border-sm rounded-lg space-y-1">
         <div className="flex justify-between font-mono text-xs font-bold">
           <span>ACTIVE STREAK</span>
-          <span className="text-brand-pink font-black">🔥 12 DAYS</span>
+          <span className="text-brand-pink font-black">🔥 {streak > 0 ? `${streak} DAYS` : '0 DAYS'}</span>
         </div>
-        <div className="flex justify-between font-mono text-xs font-bold">
-          <span>UNLOCKED BADGES</span>
-          <span>18 / 30</span>
-        </div>
+        {unlockedBadges && (
+          <div className="flex justify-between font-mono text-xs font-bold">
+            <span>UNLOCKED BADGES</span>
+            <span>{unlockedBadges.unlocked} / {unlockedBadges.total}</span>
+          </div>
+        )}
       </div>
     </div>
   );

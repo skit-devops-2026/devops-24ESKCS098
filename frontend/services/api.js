@@ -312,6 +312,11 @@ export const api = {
       body: JSON.stringify({ progress, note }),
     });
   },
+
+  // Trophy Room & Conquests
+  getMyTrophyRoom: async (category = 'ALL') => {
+    return request(`/trophy-room/me?category=${encodeURIComponent(category)}`);
+  },
 };
 
 export default api;

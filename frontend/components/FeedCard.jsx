@@ -53,12 +53,13 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
   const emojiButtonRef = useRef(null);
   const [reactionCounts, setReactionCounts] = useState(
     item.reactionCounts || {
-      '🔥': item.reactions?.includes('🔥') ? 5 : 0,
-      '❤️': item.reactions?.includes('❤️') ? 3 : 0,
-      '👏': item.reactions?.includes('👏') ? 4 : 0,
-      '🎉': item.reactions?.includes('🎉') ? 2 : 0,
+      '🔥': 0,
+      '❤️': 0,
+      '👏': 0,
+      '🎉': 0,
     }
   );
+
 
   const rotateClass = item.id % 2 === 1 ? 'rotate-1' : '-rotate-1';
 

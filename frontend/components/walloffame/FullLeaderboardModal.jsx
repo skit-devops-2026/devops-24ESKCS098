@@ -3,139 +3,44 @@ import { api } from '../../services/api';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const FULL_RANKINGS = [
-  {
-    rank: 1,
-    medal: '🥇',
-    name: 'Elena Vance',
-    squad: 'Trip Squad',
-    completedQuests: 7,
-    xp: 2250,
-    badge: '🚀 Most Adventurous',
-    streak: '6w 🔥',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA3HSnRMBfUiKLTTVz-r9NlkIjnrrTThFp0IbPVXpLlNPgMWEAE_AzPF_3q1gKLdZtX-L2sM4DUopi_V0Ad3Pp8ksOmvEFDvrrAc2i_1iWfI_k6mumBPHLcfeYS02rfVIKx20CG7tpGJns9Vvf-XqJZpJqOwTAZypQz_Kep1VB4T3TxHsRD6mThSxw9ril9D1rQH_471vxMCpyXu39zev5Rr7-s3esElO6fB82dRXi7s6TWbsLAAaY9',
-  },
-  {
-    rank: 2,
-    medal: '🥈',
-    name: 'Alex Rivero',
-    squad: 'Trip Squad',
-    completedQuests: 6,
-    xp: 1950,
-    badge: '⚡ First to Finish',
-    streak: '4w 🔥',
-    isCurrentUser: true,
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
-  },
-  {
-    rank: 3,
-    medal: '🥉',
-    name: 'Priya Sharma',
-    squad: 'College Gang',
-    completedQuests: 5,
-    xp: 1800,
-    badge: '🏍️ Nomad Rider',
-    streak: '5w 🔥',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBKroliD1w9821e4wMugprqu-0L6bjkY-8_N78i2fngH6XgKItbRSKK6saCnLJcLRLH5vflxkhKeZamVfl_lKFMC0j4KnQx0gnVIWU3PG8yLo8jwi1jQzK2ohD5D3JUghYhLVC9yFABBoJulOi_lka-0njoaF4Mc8oedX9jcwDu-0pp0gV4PIuezXkXIBZD1GDlkRbpaPVDn5NkIqmXPfRaAXSTf5CpkmYK68wZGHnDZMfckuBYyWxw',
-  },
-  {
-    rank: 4,
-    name: 'Sarah Chen',
-    squad: 'Trip Squad',
-    completedQuests: 5,
-    xp: 1550,
-    badge: '🎨 Craft Specialist',
-    streak: '3w 🔥',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&q=80',
-  },
-  {
-    rank: 5,
-    name: 'Marco Polo',
-    squad: 'Trip Squad',
-    completedQuests: 4,
-    xp: 1400,
-    badge: '🍝 Master Chef',
-    streak: '4w 🔥',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80',
-  },
-  {
-    rank: 6,
-    name: 'Jordan Smith',
-    squad: 'Fitness Freaks',
-    completedQuests: 4,
-    xp: 1200,
-    badge: '🏃 100k Club',
-    streak: '2w 🔥',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&q=80',
-  },
-  {
-    rank: 7,
-    name: 'Riya Sharma',
-    squad: 'College Gang',
-    completedQuests: 3,
-    xp: 1050,
-    badge: '📸 Best Storyteller',
-    streak: '3w 🔥',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&q=80',
-  },
-];
-
-function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
+function FullLeaderboardModal({ isOpen, onClose, userXp = 0 }) {
   const { currentUser, isAuthenticated } = useAuth();
   const [filterTab, setFilterTab] = useState('ALL_TIME');
   const [searchQuery, setSearchQuery] = useState('');
-  const [liveRankings, setLiveRankings] = useState(null);
+  const [rankings, setRankings] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isOpen) return;
     let isMounted = true;
     async function fetchRankings() {
+      setLoading(true);
       try {
         const periodParam = filterTab === 'THIS_WEEK' ? 'weekly' : 'all-time';
-        const res = await api.getLeaderboard({ period: periodParam, search: searchQuery });
-        if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
+        const res = await api.getLeaderboard({ period: periodParam, search: searchQuery, limit: 50 });
+        if (isMounted && res?.success && Array.isArray(res.top)) {
           const seen = new Set();
           const uniqueList = [];
           for (const u of res.top) {
             const key = u.name?.trim().toLowerCase();
-            if (!seen.has(key)) {
+            if (key && !seen.has(key)) {
               seen.add(key);
               uniqueList.push(u);
             }
           }
-          setLiveRankings(uniqueList);
+          setRankings(uniqueList);
         }
       } catch (err) {
-        console.warn('[Leaderboard] API fetch fallback to local:', err.message);
+        console.warn('[FullLeaderboardModal] API fetch failed:', err.message);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     }
     fetchRankings();
-    return () => { isMounted = false; };
-  }, [isOpen, filterTab, searchQuery]);
-
-  const currentRankings = (liveRankings || FULL_RANKINGS).map((item) => {
-    const isUser = Boolean(
-      isAuthenticated &&
-        (item.isCurrentUser || (currentUser && (item.id === currentUser.id || item.name?.toLowerCase() === currentUser.name?.toLowerCase())))
-    );
-    if (isUser) {
-      return {
-        ...item,
-        xp: currentUser?.xp || userXp,
-        isCurrentUser: true,
-      };
-    }
-    return {
-      ...item,
-      isCurrentUser: false,
+    return () => {
+      isMounted = false;
     };
-  })
-    .sort((a, b) => b.xp - a.xp)
-    .map((item, idx) => ({
-      ...item,
-      rank: idx + 1,
-      medal: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null,
-    }));
+  }, [isOpen, filterTab, searchQuery]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -147,11 +52,31 @@ function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
 
   if (!isOpen) return null;
 
+  const currentRankings = rankings
+    .map((item) => {
+      const isUser = Boolean(
+        isAuthenticated &&
+          (item.isCurrentUser ||
+            (currentUser && (item.id === currentUser.id || item.name?.toLowerCase() === currentUser.name?.toLowerCase())))
+      );
+      return {
+        ...item,
+        xp: isUser ? (currentUser?.xp ?? userXp) : (item.xp || 0),
+        isCurrentUser: isUser,
+      };
+    })
+    .sort((a, b) => b.xp - a.xp)
+    .map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      medal: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null,
+    }));
+
   const filtered = currentRankings
     .filter(
       (u) =>
-        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.squad.toLowerCase().includes(searchQuery.toLowerCase())
+        u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.squad && u.squad.toLowerCase().includes(searchQuery.toLowerCase()))
     )
     .sort((a, b) => {
       if (filterTab === 'STREAKS') {
@@ -161,7 +86,6 @@ function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
       }
       return a.rank - b.rank;
     });
-
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
@@ -184,106 +108,153 @@ function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 bg-white border-2 border-black rounded-lg font-mono font-black text-sm flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#e4006c] hover:text-white transition-colors cursor-pointer"
+            className="w-9 h-9 bg-black text-white border-2 border-black rounded-lg flex items-center justify-center font-bold text-sm hover:bg-neutral-800 transition-colors cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5"
+            aria-label="Close rankings"
           >
             ✕
           </button>
         </div>
 
-        {/* Filters & Search Row */}
-        <div className="p-4 bg-white border-b-3 border-black flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="flex gap-2">
-            {[
-              { id: 'ALL_TIME', label: 'All Time' },
-              { id: 'THIS_MONTH', label: 'This Month' },
-              { id: 'STREAKS', label: 'Top Streaks 🔥' },
-            ].map((tab) => (
+        {/* Filter Controls & Search Bar */}
+        <div className="p-6 pb-3 border-b-3 border-black bg-white shrink-0 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+            {/* Filter Pills */}
+            <div className="flex border-2 border-black rounded-lg overflow-hidden font-space text-xs font-bold uppercase self-start">
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => setFilterTab(tab.id)}
-                className={`px-3 py-1.5 text-xs font-space font-bold uppercase border-2 border-black rounded-lg transition-all ${
-                  filterTab === tab.id
-                    ? 'bg-black text-white shadow-[2px_2px_0px_0px_rgba(255,237,0,1)]'
-                    : 'bg-white hover:bg-yellow-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                onClick={() => setFilterTab('ALL_TIME')}
+                className={`px-3 py-1.5 cursor-pointer transition-colors ${
+                  filterTab === 'ALL_TIME' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
                 }`}
               >
-                {tab.label}
+                All-Time XP
               </button>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => setFilterTab('THIS_WEEK')}
+                className={`px-3 py-1.5 border-l-2 border-black cursor-pointer transition-colors ${
+                  filterTab === 'THIS_WEEK' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
+                }`}
+              >
+                This Week ⚡
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterTab('STREAKS')}
+                className={`px-3 py-1.5 border-l-2 border-black cursor-pointer transition-colors ${
+                  filterTab === 'STREAKS' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'
+                }`}
+              >
+                Streaks 🔥
+              </button>
+            </div>
 
-          <div className="w-full sm:w-60">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search member or squad..."
-              className="w-full px-3 py-1.5 bg-gray-50 border-2 border-black rounded-lg font-hanken text-xs focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            />
+            {/* Search Input */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search questers or squads..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-64 pl-8 pr-3 py-1.5 border-2 border-black rounded-lg font-space text-xs focus:outline-none focus:bg-yellow-50 bg-white"
+              />
+              <span className="absolute left-2.5 top-2 text-xs text-gray-500">🔍</span>
+            </div>
           </div>
         </div>
 
-        {/* Table Content */}
-        <div className="p-4 md:p-6 overflow-y-auto space-y-3">
-          {filtered.map((item) => (
-            <div
-              key={item.rank}
-              className={`p-3 md:p-4 border-3 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 transition-transform hover:-translate-y-0.5 ${
-                item.isCurrentUser
-                  ? 'bg-[#ffed00] border-black shadow-[6px_6px_0px_0px_rgba(228,0,108,1)]'
-                  : 'bg-white'
-              }`}
-            >
-              {/* Rank & User */}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="w-8 text-center font-bricolage font-black text-lg text-black">
-                  {item.medal || `#${item.rank}`}
-                </span>
-                <div className="w-12 h-12 shrink-0 border-2 border-black rounded-xl overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-white">
-                  <img
-                    alt={item.name}
-                    src={item.avatar}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`;
-                    }}
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bricolage font-black text-base text-black truncate">
-                      {item.name}
-                    </h4>
-                    {item.isCurrentUser && (
-                      <span className="px-1.5 py-0.2 bg-black text-white text-[10px] font-space font-black rounded uppercase">
-                        You
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-space text-black/70">
-                    <span>{item.squad}</span>
-                    <span>•</span>
-                    <span className="text-amber-600 font-bold">{item.streak}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Badges & Stats */}
-              <div className="flex items-center gap-3 shrink-0">
-                {item.badge && (
-                  <span className="hidden md:inline-block px-2.5 py-1 bg-[#bdf2ff] text-black border-2 border-black rounded-md font-space font-bold text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    {item.badge}
-                  </span>
-                )}
-                <div className="text-right font-space">
-                  <p className="font-black text-sm text-black">{item.xp.toLocaleString()} XP</p>
-                  <p className="text-[11px] font-bold text-black/60">{item.completedQuests} quests</p>
-                </div>
-              </div>
+        {/* Scrollable Rankings List */}
+        <div className="overflow-y-auto p-6 space-y-3 flex-1 bg-neutral-50">
+          {loading ? (
+            <div className="space-y-3 py-4 animate-pulse">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <div key={n} className="h-16 bg-white border-2 border-black rounded-xl" />
+              ))}
             </div>
-          ))}
+          ) : filtered.length === 0 ? (
+            <div className="py-12 text-center text-gray-500 font-hanken">
+              <span className="text-4xl block mb-2">🔍</span>
+              <p className="font-bold">No questers found matching "{searchQuery}"</p>
+            </div>
+          ) : (
+            filtered.map((player) => (
+              <div
+                key={player.id || player.name}
+                className={`p-4 border-3 border-black rounded-xl flex items-center justify-between gap-4 transition-transform hover:-translate-y-0.5 ${
+                  player.isCurrentUser
+                    ? 'bg-brand-yellow shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                    : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                }`}
+              >
+                {/* Left: Rank & Avatar & Info */}
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-8 text-center font-black font-space text-lg text-black shrink-0">
+                    {player.medal || `#${player.rank}`}
+                  </div>
+
+                  <div className="w-11 h-11 rounded-full border-2 border-black overflow-hidden bg-gray-200 shrink-0">
+                    <img
+                      src={player.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(player.name)}`}
+                      alt={player.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(player.name)}`;
+                      }}
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bricolage font-black text-sm md:text-base text-black truncate">
+                        {player.name} {player.isCurrentUser && '(You)'}
+                      </h4>
+                      {player.isCurrentUser && (
+                        <span className="bg-black text-white text-[9px] font-space font-black px-1.5 py-0.2 rounded uppercase">
+                          YOU
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-space text-black/70">
+                      {player.squad && <span>{player.squad}</span>}
+                      {player.badge && (
+                        <>
+                          <span>•</span>
+                          <span className="hidden sm:inline font-bold text-black">{player.badge}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: XP & Streak */}
+                <div className="flex items-center gap-4 shrink-0 text-right">
+                  {player.streak && (
+                    <span className="hidden sm:inline-block px-2 py-1 bg-amber-100 border border-black rounded text-[11px] font-space font-bold">
+                      {player.streak}
+                    </span>
+                  )}
+                  <div className="font-space font-black text-sm md:text-base text-black">
+                    {Number(player.xp).toLocaleString()} XP
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-6 py-3.5 bg-white border-t-3 border-black flex items-center justify-between text-xs font-space font-bold shrink-0">
+          <span className="text-black/70">
+            Total active questers on LifeQuest: {currentRankings.length}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-1.5 bg-black text-white rounded font-space font-bold uppercase hover:bg-neutral-800 cursor-pointer"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>,

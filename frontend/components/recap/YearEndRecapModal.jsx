@@ -1,38 +1,24 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-
-const RECAP_DATA = {
-  year: '2026',
-  totalQuests: 24,
-  totalXp: '14,850',
-  percentile: 'Top 3%',
-  longestStreak: '8 Weeks 🔥',
-  squadCount: 3,
-  topSquad: 'Trip Squad ✈️',
-  partnerInCrime: 'Elena Vance (@elena)',
-  vibeDna: [
-    { category: 'ADVENTURE', percent: 60, color: 'bg-brand-pink text-white', icon: '🏔️' },
-    { category: 'TRAVEL', percent: 20, color: 'bg-brand-cyan text-black', icon: '✈️' },
-    { category: 'SKILLS', percent: 15, color: 'bg-brand-yellow text-black', icon: '🍳' },
-    { category: 'FITNESS', percent: 5, color: 'bg-brand-lime text-black', icon: '🏃' },
-  ],
-  goldenMoment: {
-    title: 'Summit Mount Fuji at Sunrise 🏔️',
-    date: 'October 24, 2026',
-    stat: '3,776m Altitude • Dawn Summit',
-    quote: 'Caught the golden morning rays above the clouds with 5 squad members by my side.',
-    image: 'https://images.unsplash.com/photo-1526772662000-3f88f10405ff?w=800&q=80',
-  },
-};
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Yearly retrospective modal showcasing milestone highlights, squad achievements,
  * and personal quester stats in a slide-by-slide recap.
  */
-function YearEndRecapModal({ isOpen, onClose }) {
+function YearEndRecapModal({ isOpen, onClose, userStats = null }) {
+  const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('SNAPSHOT'); // 'SNAPSHOT' | 'VIBE_DNA' | 'SQUAD' | 'MEMORY'
   const [copiedLink, setCopiedLink] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+
+  const year = '2026';
+  const userName = currentUser?.name || 'Explorer';
+  const totalQuests = userStats?.totalQuests ?? (currentUser?.completed_quests ?? 0);
+  const totalXp = currentUser?.xp ? Number(currentUser.xp).toLocaleString() : '0';
+  const streak = currentUser?.streak ? `${currentUser.streak} Days 🔥` : 'Active 🔥';
+  const vibe = currentUser?.vibe || 'ADVENTURER 🧗';
+  const topSquad = userStats?.topSquad || 'Squad Crew 🛡️';
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -45,7 +31,8 @@ function YearEndRecapModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.origin + '/recap-2026?user=alex');
+    const handle = currentUser?.email ? currentUser.email.split('@')[0] : 'me';
+    navigator.clipboard.writeText(`${window.location.origin}/trophy-room?user=${encodeURIComponent(handle)}`);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 3000);
   };
@@ -54,6 +41,7 @@ function YearEndRecapModal({ isOpen, onClose }) {
     setDownloadSuccess(true);
     setTimeout(() => setDownloadSuccess(false), 3000);
   };
+
 
   return createPortal(
     <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -73,14 +61,14 @@ function YearEndRecapModal({ isOpen, onClose }) {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-bricolage font-black text-xl md:text-2xl uppercase tracking-tight text-black">
-                  {RECAP_DATA.year} Quest Wrapped
+                  {year} Quest Wrapped
                 </h2>
                 <span className="px-2 py-0.5 bg-brand-pink text-white font-mono text-[10px] font-black rounded uppercase">
                   Viral Edition
                 </span>
               </div>
               <p className="text-xs font-space font-bold text-black/80">
-                Your annual adventure scoreboard & milestone highlights
+                {userName}'s annual adventure scoreboard & milestone highlights
               </p>
             </div>
           </div>
@@ -131,31 +119,31 @@ function YearEndRecapModal({ isOpen, onClose }) {
                     ANNUAL SCOREBOARD
                   </span>
                   <span className="font-mono text-xs font-bold bg-white text-black px-2 py-1 rounded brutal-border-sm">
-                    {RECAP_DATA.percentile} Quester
+                    {vibe}
                   </span>
                 </div>
 
                 <div className="space-y-1">
                   <h3 className="font-bricolage font-black text-4xl md:text-5xl leading-none">
-                    {RECAP_DATA.totalQuests} Quests
+                    {totalQuests} Quests
                   </h3>
                   <p className="font-space font-bold text-base text-black/80">
-                    Conquered in {RECAP_DATA.year} across {RECAP_DATA.squadCount} Squads
+                    Conquered in {year} by {userName}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
                   <div className="p-3 bg-white brutal-border-sm rounded-xl">
                     <p className="font-mono text-[10px] font-bold text-neutral-500 uppercase">XP Banked</p>
-                    <p className="font-mono text-lg font-black text-brand-pink">+{RECAP_DATA.totalXp} XP</p>
+                    <p className="font-mono text-lg font-black text-brand-pink">+{totalXp} XP</p>
                   </div>
                   <div className="p-3 bg-white brutal-border-sm rounded-xl">
-                    <p className="font-mono text-[10px] font-bold text-neutral-500 uppercase">Longest Streak</p>
-                    <p className="font-mono text-lg font-black text-black">{RECAP_DATA.longestStreak}</p>
+                    <p className="font-mono text-[10px] font-bold text-neutral-500 uppercase">Active Streak</p>
+                    <p className="font-mono text-lg font-black text-black">{streak}</p>
                   </div>
                   <div className="p-3 bg-white brutal-border-sm rounded-xl col-span-2 sm:col-span-1">
                     <p className="font-mono text-[10px] font-bold text-neutral-500 uppercase">Top Tribe</p>
-                    <p className="font-mono text-sm font-black text-black truncate">{RECAP_DATA.topSquad}</p>
+                    <p className="font-mono text-sm font-black text-black truncate">{topSquad}</p>
                   </div>
                 </div>
               </div>
@@ -190,32 +178,12 @@ function YearEndRecapModal({ isOpen, onClose }) {
                     Your Quest Personality
                   </h3>
                   <span className="px-2 py-1 bg-brand-pink text-white font-mono text-xs font-black rounded brutal-border-sm">
-                    THRILL SEEKER 🧗
+                    {vibe}
                   </span>
                 </div>
                 <p className="font-hanken text-xs text-neutral-700 font-medium">
-                  You lean heavily into physical challenges and world exploration, pushing your squad forward when terrain gets steep.
+                  You lean into adventure challenges and community exploration, pushing forward with your squad whenever a new milestone opens.
                 </p>
-
-                {/* Progress Visual Bars */}
-                <div className="space-y-3 pt-2">
-                  {RECAP_DATA.vibeDna.map((v) => (
-                    <div key={v.category} className="space-y-1">
-                      <div className="flex justify-between items-center text-xs font-mono font-bold">
-                        <span>
-                          {v.icon} {v.category}
-                        </span>
-                        <span>{v.percent}%</span>
-                      </div>
-                      <div className="w-full h-4 bg-neutral-200 brutal-border-sm rounded-full overflow-hidden p-0.5">
-                        <div
-                          className={`h-full rounded-full ${v.color.split(' ')[0]}`}
-                          style={{ width: `${v.percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           )}
@@ -226,33 +194,29 @@ function YearEndRecapModal({ isOpen, onClose }) {
               <div className="p-6 bg-brand-cyan brutal-border rounded-xl shadow-brutal space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-xs font-black uppercase bg-black text-white px-2.5 py-1 rounded">
-                    MVP SQUAD OF 2026
+                    SQUAD VANGUARD
                   </span>
                   <span className="font-mono text-xs font-bold text-neutral-800">
-                    12 Joint Quests
+                    Joint Quests
                   </span>
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl border-3 border-black overflow-hidden bg-white shadow-brutal-sm shrink-0">
-                    <img
-                      src="https://images.unsplash.com/photo-1528127269322-539801943592?w=150&q=80"
-                      alt="Trip Squad"
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="w-16 h-16 rounded-2xl border-3 border-black overflow-hidden bg-white shadow-brutal-sm shrink-0 flex items-center justify-center text-3xl">
+                    🛡️
                   </div>
                   <div>
                     <h3 className="font-bricolage font-black text-2xl uppercase text-black">
-                      {RECAP_DATA.topSquad}
+                      {topSquad}
                     </h3>
                     <p className="font-hanken text-xs font-bold text-black/80">
-                      Co-adventurer MVP: {RECAP_DATA.partnerInCrime}
+                      Co-adventurer Squad
                     </p>
                   </div>
                 </div>
 
                 <div className="p-3 bg-white brutal-border-sm rounded-lg text-xs font-hanken text-neutral-800 font-medium">
-                  "Together we crossed mountain summits, logged night cardio runs, and never let a weekend go to waste."
+                  "Tackle shared milestones together, log checkpoints, and never leave an adventure unfinished."
                 </div>
               </div>
             </div>
@@ -265,8 +229,8 @@ function YearEndRecapModal({ isOpen, onClose }) {
               <div className="p-5 bg-white border-4 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-3 -rotate-1 hover:rotate-0 transition-transform">
                 <div className="relative h-60 w-full border-3 border-black rounded-xl overflow-hidden bg-black">
                   <img
-                    src={RECAP_DATA.goldenMoment.image}
-                    alt={RECAP_DATA.goldenMoment.title}
+                    src="https://images.unsplash.com/photo-1526772662000-3f88f10405ff?w=800&q=80"
+                    alt="Memory highlight"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute top-2 left-2 px-2.5 py-1 bg-brand-yellow border-2 border-black rounded font-space font-black text-[10px] uppercase shadow">
@@ -277,20 +241,15 @@ function YearEndRecapModal({ isOpen, onClose }) {
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bricolage font-black text-lg text-black">
-                      {RECAP_DATA.goldenMoment.title}
+                      Summit Sunrise Expedition 🏔️
                     </h4>
                     <span className="font-mono text-[11px] font-bold text-neutral-500">
-                      {RECAP_DATA.goldenMoment.date}
+                      Season 2026
                     </span>
                   </div>
                   <p className="font-hanken text-xs text-neutral-700 italic">
-                    "{RECAP_DATA.goldenMoment.quote}"
+                    "Caught the morning rays above the clouds with squad members by my side."
                   </p>
-                  <div className="pt-2">
-                    <span className="px-2 py-0.5 bg-neutral-100 rounded text-[10px] font-mono font-bold text-neutral-600 border border-neutral-300">
-                      {RECAP_DATA.goldenMoment.stat}
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>
