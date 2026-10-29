@@ -1,8 +1,15 @@
 'use strict';
 
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+
+let bcrypt = null;
+try {
+  const mod = await import('bcryptjs');
+  bcrypt = mod.default || mod;
+} catch {
+  // bcryptjs not installed in node_modules; crypto.scryptSync handles hashing
+}
 import { User } from '../models/index.js';
 import { isMongoConnected, inMemoryStore } from '../config/db.js';
 
@@ -71,7 +78,7 @@ async function verifyPassword(password, storedHash) {
     return password === 'password123' || password === 'alex123' || password === 'admin123';
   }
 
-  if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$')) {
+  if (bcrypt && (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$'))) {
     try {
       const match = await bcrypt.compare(password, storedHash);
       if (match) return true;
@@ -100,8 +107,13 @@ async function verifyPassword(password, storedHash) {
 }
 
 async function hashPassword(password) {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
+  if (bcrypt && typeof bcrypt.genSalt === 'function') {
+    const salt = await bcrypt.genSalt(10);
+    return bcrypt.hash(password, salt);
+  }
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64);
+  return `${salt}:${derivedKey.toString('hex')}`;
 }
 
 // User signup / registration
