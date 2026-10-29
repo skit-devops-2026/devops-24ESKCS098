@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
-import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { getUserAvatar } from '../utils/avatar';
+import { createPortal } from 'react-dom';
+import { useAuth } from '../context/AuthContext';
+
+const COMMENT_EMOJI_PALETTE = ['🔥', '❤️', '👏', '🎉', '⚡', '🚀', '⭐', '💪', '🙌', '💯', '👑', '🥳', '😎', '🏆', '🎯', '✨'];
 
 const REACTION_OPTIONS = [
   { emoji: '🔥', label: 'Fire', bg: 'hover:bg-amber-100', type: 'fire' },
@@ -38,7 +38,7 @@ const getReactionEmoji = (val) => (val ? REACTION_TYPE_TO_EMOJI[val] || val : ''
 const getReactionType = (val) => (val ? EMOJI_TO_REACTION_TYPE[val] || val : '');
 
 function FeedCard({ item, onShare, onFriendClick, onDelete }) {
-  const { user, requireAuth } = useAuth();
+  const { currentUser, isAuthenticated, openAuthModal } = useAuth();
   const [likes, setLikes] = useState(item.likes || 0);
   const [hasLiked, setHasLiked] = useState(item.hasLiked || false);
   const [showComments, setShowComments] = useState(false);
@@ -121,107 +121,118 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
     }, 0);
   };
 
-  // Toggle Like
-  const handleToggleLike = () => {
-    requireAuth(async () => {
-      const nextLiked = !hasLiked;
-      setHasLiked(nextLiked);
-      setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
-      try {
-        if (nextLiked) {
-          await api.upsertReaction(item.id, 'like');
-        } else {
-          await api.deleteReaction(item.id);
-        }
-      } catch (err) {
-        console.warn('Like reaction update error:', err);
+  // Toggle Like with MongoDB sync
+  const handleToggleLike = async () => {
+    if (!isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
+    const nextLiked = !hasLiked;
+    setHasLiked(nextLiked);
+    setLikes((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
+    try {
+      if (nextLiked) {
+        await api.upsertReaction(item.id, 'like');
+      } else {
+        await api.deleteReaction(item.id);
       }
-    }, { prompt: 'Log in to like this quest achievement!' });
+    } catch (err) {
+      console.warn('[FeedCard] Sync like error:', err.message);
+    }
   };
 
-  // Add / Change Reaction
-  const handleSelectReaction = (emoji, type) => {
-    requireAuth(async () => {
-      const selectedType = type || getReactionType(emoji) || 'fire';
-      const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
-      const currentUserType = getReactionType(userReaction);
-      const currentUserEmoji = getReactionEmoji(userReaction);
-      const isDeselect =
-        userReaction === selectedType ||
-        userReaction === selectedEmoji ||
-        currentUserType === selectedType;
-
-      setReactionCounts((prev) => {
-        const next = { ...prev };
-        const targetKey =
-          next[selectedType] !== undefined
-            ? selectedType
-            : next[selectedEmoji] !== undefined
-            ? selectedEmoji
-            : selectedType;
-
-        if (isDeselect) {
-          next[targetKey] = Math.max(0, (next[targetKey] || 1) - 1);
-          setUserReaction(null);
-        } else {
-          if (userReaction) {
-            const oldType = getReactionType(userReaction);
-            const oldEmoji = getReactionEmoji(userReaction);
-            const oldKey =
-              next[oldType] !== undefined
-                ? oldType
-                : next[oldEmoji] !== undefined
-                ? oldEmoji
-                : oldType;
-            if (next[oldKey] !== undefined) {
-              next[oldKey] = Math.max(0, next[oldKey] - 1);
-            }
-          }
-          next[targetKey] = (next[targetKey] || 0) + 1;
-          setUserReaction(selectedType);
-        }
-        return next;
-      });
+  // Add / Change Reaction with MongoDB sync
+  const handleSelectReaction = async (emoji, type) => {
+    if (!isAuthenticated) {
       setShowReactionPicker(false);
+      openAuthModal('login');
+      return;
+    }
+    const selectedType = type || getReactionType(emoji) || 'fire';
+    const selectedEmoji = emoji || getReactionEmoji(selectedType) || '🔥';
+    const currentUserType = getReactionType(userReaction);
+    const currentUserEmoji = getReactionEmoji(userReaction);
+    const isDeselect =
+      userReaction === selectedType ||
+      userReaction === selectedEmoji ||
+      currentUserType === selectedType;
 
-      try {
-        if (isDeselect) {
-          await api.deleteReaction(item.id);
-        } else {
-          await api.upsertReaction(item.id, selectedType);
+    setReactionCounts((prev) => {
+      const next = { ...prev };
+      const targetKey =
+        next[selectedType] !== undefined
+          ? selectedType
+          : next[selectedEmoji] !== undefined
+          ? selectedEmoji
+          : selectedType;
+
+      if (isDeselect) {
+        next[targetKey] = Math.max(0, (next[targetKey] || 1) - 1);
+        setUserReaction(null);
+      } else {
+        if (userReaction) {
+          const oldType = getReactionType(userReaction);
+          const oldEmoji = getReactionEmoji(userReaction);
+          const oldKey =
+            next[oldType] !== undefined
+              ? oldType
+              : next[oldEmoji] !== undefined
+              ? oldEmoji
+              : oldType;
+          if (next[oldKey] !== undefined) {
+            next[oldKey] = Math.max(0, next[oldKey] - 1);
+          }
         }
-      } catch (err) {
-        console.warn('Reaction update error:', err);
+        next[targetKey] = (next[targetKey] || 0) + 1;
+        setUserReaction(selectedType);
       }
-    }, { prompt: 'Log in to react to this quest!' });
+      return next;
+    });
+    setShowReactionPicker(false);
+
+    try {
+      if (isDeselect) {
+        await api.deleteReaction(item.id);
+      } else {
+        await api.upsertReaction(item.id, selectedType);
+      }
+    } catch (err) {
+      console.warn('[FeedCard] Sync reaction error:', err.message);
+    }
   };
 
   // Submit Comment with MongoDB sync
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
+    if (!isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
     const text = newComment.trim();
     if (!text) return;
 
-    requireAuth(async () => {
-      const tempComment = {
-        id: Date.now(),
-        authorId: user?.id || 1,
-        isOwner: true,
-        name: user?.name ? `${user.name} (You)` : 'You',
-        color: 'text-primary font-black',
-        text,
-        time: 'Just now',
-      };
+    const tempId = Date.now();
+    const tempComment = {
+      id: tempId,
+      authorId: currentUser?.id || 1,
+      isOwner: true,
+      name: currentUser ? `You (${currentUser.name})` : 'You',
+      color: 'text-primary font-black',
+      text,
+      time: 'Just now',
+    };
 
-      setComments((prev) => [...prev, tempComment]);
-      setNewComment('');
+    setComments((prev) => [...prev, tempComment]);
+    setNewComment('');
 
-      try {
-        await api.addComment(item.id, text);
-      } catch (err) {
-        console.warn('Failed to persist comment to backend:', err);
+    try {
+      const res = await api.addComment(item.id, text);
+      if (res?.success && res.comment) {
+        setComments((prev) => prev.map((c) => (c.id === tempId ? res.comment : c)));
       }
-    }, { prompt: 'Log in or sign up to comment on this quest!' });
+    } catch (err) {
+      console.warn('[FeedCard] Add comment error:', err.message);
+    }
   };
 
   // Delete Comment with MongoDB sync
@@ -268,7 +279,14 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
           <img
             alt={item.name}
             className="w-full h-full object-cover"
-            src={getUserAvatar(item.authorId || item.author_id, item.avatar, item.name)}
+            src={
+              item.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`
+            }
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Quester')}&background=FFED00&color=000&bold=true`;
+            }}
           />
         </div>
         <div className="flex-1 min-w-0">
@@ -417,8 +435,8 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
             </svg>
           </button>
 
-          {/* Delete Post Button */}
-          {onDelete && (
+          {/* Delete Post Button (Author only) */}
+          {onDelete && isAuthenticated && (item.isOwner || (currentUser && (item.author_id === currentUser.id || item.authorId === currentUser.id || item.name?.includes(currentUser.name)))) && (
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
@@ -578,20 +596,23 @@ function FeedCard({ item, onShare, onFriendClick, onDelete }) {
                   </button>
                 </div>
 
-                {/* Emoji Picker Body */}
-                <EmojiPicker
-                  onEmojiClick={(emojiData) => handleAddEmoji(emojiData.emoji)}
-                  autoFocusSearch={false}
-                  theme={Theme.LIGHT}
-                  emojiStyle={EmojiStyle.APPLE}
-                  searchPlaceHolder="Search emojis (smile, dog, fire...)"
-                  width="100%"
-                  height={400}
-                  lazyLoadEmojis={true}
-                  previewConfig={{
-                    showPreview: true,
-                  }}
-                />
+                {/* Quick Emoji Palette */}
+                <div className="p-3 grid grid-cols-8 gap-2 bg-[#FFFDF5]">
+                  {COMMENT_EMOJI_PALETTE.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        handleAddEmoji(emoji);
+                        setShowEmojiPicker(false);
+                      }}
+                      className="w-8 h-8 flex items-center justify-center text-lg bg-white hover:bg-brand-yellow border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] active:scale-95 transition-all cursor-pointer"
+                      title={emoji}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </form>

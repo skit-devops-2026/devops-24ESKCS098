@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getUserAvatar } from '../../utils/avatar';
-import { api } from '../../services/api';
 
 const PERSONAL_STATS = {
   totalQuests: 6,
@@ -224,35 +222,22 @@ const COMPLETED_ITEMS = [
 ];
 
 function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
-  const { user, isAuthenticated } = useAuth();
-  const [serverStats, setServerStats] = useState(null);
-  const [serverBadges, setServerBadges] = useState(null);
-  const [serverCompleted, setServerCompleted] = useState(null);
-
+  const { currentUser } = useAuth();
+  const [stats] = useState(PERSONAL_STATS);
+  const [badges] = useState(ALL_BADGES);
   const [badgeFilter, setBadgeFilter] = useState('ALL'); // 'ALL' | 'UNLOCKED' | 'LOCKED'
   const [filterCategory, setFilterCategory] = useState('ALL');
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    let isMounted = true;
-    api.getMyTrophyRoom(filterCategory)
-      .then((res) => {
-        if (isMounted && res.success) {
-          if (res.stats) setServerStats(res.stats);
-          if (res.badges) setServerBadges(res.badges);
-          if (res.completedItems) setServerCompleted(res.completedItems);
-        }
-      })
-      .catch((err) => console.warn('Trophy room fetch error:', err));
-    return () => { isMounted = false; };
-  }, [isAuthenticated, filterCategory]);
-
-  const stats = serverStats || PERSONAL_STATS;
-  const badges = serverBadges || ALL_BADGES;
-
-  // Convert newly created posts by user into authentic trophy conquest cards
+  // Convert newly created posts into authentic trophy conquest cards
   const newConquests = (userPosts || [])
-    .filter((p) => p && (p.isOwner || (typeof p.id === 'number' && p.id > 100)))
+    .filter((p) =>
+      p && (
+        p.isOwner ||
+        (currentUser && (p.author_id === currentUser.id || p.authorId === currentUser.id || p.name?.includes(currentUser.name))) ||
+        p.name?.includes('Alex Rivero') ||
+        (typeof p.id === 'number' && p.id > 100)
+      )
+    )
     .filter((p) => !COMPLETED_ITEMS.some((c) => c.postId === p.id))
     .map((p) => ({
       id: `comp-${p.id}`,
@@ -273,27 +258,23 @@ function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
   const [privacyMap, setPrivacyMap] = useState({});
 
   const togglePrivacy = (id) => {
-    setPrivacyMap((prev) => {
-      const nextVal = prev[id] !== undefined ? !prev[id] : true;
-      // Sync with backend if postId exists
-      const target = items.find((i) => i.id === id);
-      if (target?.postId) {
-        api.updatePostVisibility(target.postId, nextVal ? 'personal' : 'shared').catch(() => {});
-      }
-      return { ...prev, [id]: nextVal };
-    });
+    setPrivacyMap((prev) => ({
+      ...prev,
+      [id]: prev[id] !== undefined ? !prev[id] : true,
+    }));
   };
 
-  const baseCompleted = serverCompleted && serverCompleted.length > 0 ? serverCompleted : COMPLETED_ITEMS;
-  const rawItems = [...newConquests, ...baseCompleted];
+  const rawItems = [...newConquests, ...COMPLETED_ITEMS];
   const items = rawItems.map((item) => ({
     ...item,
     isPrivate: privacyMap[item.id] !== undefined ? privacyMap[item.id] : item.isPrivate,
   }));
 
-  const totalQuests = stats.totalQuests || (6 + newConquests.length);
-  const totalXp = stats.totalXp || `${userXp.toLocaleString()} XP`;
-  const currentRank = stats.currentRank || '#2';
+  const totalQuests = 6 + newConquests.length;
+  const OTHER_USERS_XP = [2250, 1800, 1550, 1400, 1200, 1050];
+  const rankNum = OTHER_USERS_XP.filter((xp) => xp > userXp).length + 1;
+  const currentRank = `#${rankNum}`;
+  const totalXp = `${userXp.toLocaleString()} XP`;
 
   const filteredItems =
     filterCategory === 'ALL'
@@ -307,8 +288,6 @@ function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
   });
 
   const unlockedCount = badges.filter((b) => !b.locked).length;
-  const avatarUrl = getUserAvatar(user?.id, user?.avatar_url || user?.avatar, user?.name);
-  const questerName = user?.name ? `${user.name}'s Trophy Room` : (isAuthenticated ? "Adventurer's Trophy Room" : "Alex Rivero's Trophy Room");
 
   return (
     <div className="space-y-10 animate-in fade-in duration-300">
@@ -318,18 +297,22 @@ function PersonalTrophyRoom({ userXp = 1950, userPosts = [] }) {
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 border-3 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white">
               <img
-                alt={questerName}
+                alt={currentUser?.name || 'User Avatar'}
                 className="w-full h-full object-cover"
-                src={avatarUrl}
+                src={currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80'}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentUser?.name || 'Explorer')}`;
+                }}
               />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-bricolage font-black text-2xl md:text-3xl uppercase tracking-tight text-black">
-                  {questerName}
+                  {currentUser?.name || 'Adventurer'}'s Trophy Room
                 </h2>
                 <span className="px-2.5 py-1 bg-black text-white font-space font-black text-xs rounded uppercase">
-                  Level {Math.max(1, Math.floor((parseInt(totalXp, 10) || 1950) / 400))}
+                  Level {Math.max(1, Math.floor((userXp || 250) / 300))}
                 </span>
               </div>
               <p className="font-hanken font-medium text-black/80 text-sm mt-1">

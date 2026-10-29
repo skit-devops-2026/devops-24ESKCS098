@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { api } from '../../services/api';
-import { getUserAvatar } from '../../utils/avatar';
+import { createPortal } from 'react-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const FULL_RANKINGS = [
   {
@@ -81,56 +81,60 @@ const FULL_RANKINGS = [
 ];
 
 function FullLeaderboardModal({ isOpen, onClose, userXp = 1950 }) {
+  const { currentUser, isAuthenticated } = useAuth();
   const [filterTab, setFilterTab] = useState('ALL_TIME');
   const [searchQuery, setSearchQuery] = useState('');
-  const [apiRankings, setApiRankings] = useState([]);
+  const [liveRankings, setLiveRankings] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
     let isMounted = true;
-
     async function fetchRankings() {
       try {
-        const periodMap = {
-          THIS_MONTH: 'monthly',
-          THIS_WEEK: 'weekly',
-          ALL_TIME: 'all-time',
-          STREAKS: 'all-time',
-        };
-        const period = periodMap[filterTab] || 'all-time';
-        const data = await api.getLeaderboard({ period, search: searchQuery, limit: 50 });
-        if (isMounted && data.success && Array.isArray(data.top) && data.top.length > 0) {
-          setApiRankings(data.top);
+        const periodParam = filterTab === 'THIS_WEEK' ? 'weekly' : 'all-time';
+        const res = await api.getLeaderboard({ period: periodParam, search: searchQuery });
+        if (isMounted && res?.success && Array.isArray(res.top) && res.top.length > 0) {
+          const seen = new Set();
+          const uniqueList = [];
+          for (const u of res.top) {
+            const key = u.name?.trim().toLowerCase();
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueList.push(u);
+            }
+          }
+          setLiveRankings(uniqueList);
         }
       } catch (err) {
-        // Fallback to local rankings on error
+        console.warn('[Leaderboard] API fetch fallback to local:', err.message);
       }
     }
-
     fetchRankings();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [isOpen, filterTab, searchQuery]);
 
-  const sourceRankings = apiRankings.length > 0 ? apiRankings : FULL_RANKINGS;
-
-  const currentRankings = sourceRankings.map((item) => {
-    if (item.isCurrentUser || item.name?.includes('Alex Rivero')) {
+  const currentRankings = (liveRankings || FULL_RANKINGS).map((item) => {
+    const isUser = Boolean(
+      isAuthenticated &&
+        (item.isCurrentUser || (currentUser && (item.id === currentUser.id || item.name?.toLowerCase() === currentUser.name?.toLowerCase())))
+    );
+    if (isUser) {
       return {
         ...item,
-        xp: userXp,
+        xp: currentUser?.xp || userXp,
+        isCurrentUser: true,
       };
     }
-    return item;
+    return {
+      ...item,
+      isCurrentUser: false,
+    };
   })
     .sort((a, b) => b.xp - a.xp)
     .map((item, idx) => ({
       ...item,
-      rank: item.rank || idx + 1,
-      medal: (item.rank || idx + 1) === 1 ? '🥇' : (item.rank || idx + 1) === 2 ? '🥈' : (item.rank || idx + 1) === 3 ? '🥉' : null,
-      avatar: getUserAvatar(item, item.name),
+      rank: idx + 1,
+      medal: idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null,
     }));
 
   useEffect(() => {

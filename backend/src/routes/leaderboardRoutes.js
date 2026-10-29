@@ -3,7 +3,7 @@ const router = express.Router();
 const leaderboardController = require('../controllers/leaderboardController');
 const { optionalAuth } = require('../middleware/auth');
 
-// GET /api/leaderboard?period=weekly|monthly|all-time&groupId=&search=&limit=
+// GET /api/leaderboard?period=weekly|monthly|all-time&groupId=&search=&limit= (Public / Guest readable with optionalAuth)
 router.get('/', optionalAuth, leaderboardController.getLeaderboard);
 
 module.exports = router;

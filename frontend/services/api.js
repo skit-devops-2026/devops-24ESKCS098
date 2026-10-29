@@ -1,54 +1,14 @@
 // Frontend API service for LifeQuest Wall of Fame
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-const TOKEN_KEY = 'lq_auth_token';
-const USER_KEY = 'lq_auth_user';
-
-export function getStoredToken() {
-  try {
-    return localStorage.getItem(TOKEN_KEY) || null;
-  } catch {
-    return null;
-  }
-}
-
-export function getStoredUser() {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setAuthSession(token, user) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-  } catch (e) {
-    console.error('Failed to save auth session to localStorage', e);
-  }
-}
-
-export function clearAuthSession() {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  } catch (e) {
-    console.error('Failed to clear auth session from localStorage', e);
-  }
-}
-
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
-  const token = getStoredToken();
-  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
-
+  const token = typeof window !== 'undefined' ? localStorage.getItem('lifequest_token') : null;
   const config = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   };
@@ -58,21 +18,7 @@ async function request(endpoint, options = {}) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      if (res.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {
-        clearAuthSession();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent('lifequest:auth-required', {
-              detail: { message: data.message || 'Please log in to continue.' },
-            })
-          );
-        }
-      }
-
-      const err = new Error(data.message || `Request failed with status ${res.status}`);
-      err.status = res.status;
-      err.data = data;
-      throw err;
+      throw new Error(data.message || `Request failed with status ${res.status}`);
     }
     return data;
   } catch (err) {
@@ -82,18 +28,18 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
-  // ── Authentication ──────────────────────────────────────────────────────────
-  signup: async (userData) => {
-    return request('/auth/signup', {
+  // Auth
+  register: async ({ name, email, password, vibe }) => {
+    return request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(userData),
+      body: JSON.stringify({ name, email, password, vibe }),
     });
   },
 
-  login: async (credentials) => {
+  login: async ({ email, password }) => {
     return request('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(credentials),
+      body: JSON.stringify({ email, password }),
     });
   },
 
@@ -101,11 +47,6 @@ export const api = {
     return request('/auth/me');
   },
 
-  logout: async () => {
-    return request('/auth/logout', {
-      method: 'POST',
-    });
-  },
   // Feed
   getFeed: async (filter = 'all', page = 1) => {
     return request(`/posts?filter=${encodeURIComponent(filter)}&page=${page}`);
@@ -189,9 +130,13 @@ export const api = {
   uploadImage: async (file) => {
     const formData = new FormData();
     formData.append('image', file);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('lifequest_token') : null;
 
     const res = await fetch(`${API_BASE}/upload`, {
       method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: formData,
     });
     const data = await res.json().catch(() => ({}));
@@ -200,23 +145,13 @@ export const api = {
   },
 
   // ── BucketList ─────────────────────────────────────────────────────────────
-  //
-  // Auth note: In development, the backend accepts x-dev-user-id to simulate
-  // a logged-in user (default user id = 1, Alex Rivero).
-  // In production, swap _bucketlistHeaders() to return { Authorization: `Bearer ${token}` }.
-  //
-  // Status values sent to/from the API follow frontend convention:
-  //   'not-started' | 'in-progress' | 'completed'
-  // The backend maps these to/from MongoDB values automatically.
-  // Goal and Group IDs are MongoDB ObjectId strings when MongoDB is connected.
-
-  /** Auth headers: uses stored JWT Bearer token if present. */
-  _bucketlistHeaders(devUserId = 1) {
-    const token = getStoredToken();
+  /** Return headers with JWT bearer token or fallback dev header */
+  _bucketlistHeaders(devUserId) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('lifequest_token') : null;
     if (token) {
       return { Authorization: `Bearer ${token}` };
     }
-    return { 'x-dev-user-id': String(devUserId) };
+    return devUserId ? { 'x-dev-user-id': String(devUserId) } : {};
   },
 
   // ── Personal Goals ──────────────────────────────────────────────────────────

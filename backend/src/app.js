@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const authRoutes = require('./routes/authRoutes');
 const postRoutes = require('./routes/postRoutes');
 const leaderboardRoutes = require('./routes/leaderboardRoutes');
 const trophyRoomRoutes = require('./routes/trophyRoomRoutes');

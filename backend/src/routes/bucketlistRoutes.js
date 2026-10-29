@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth, optionalAuth } = require('../middleware/auth');
-const ctrl = require('../controllers/bucketlistControllerMongo');
+const ctrl = require('../controllers/bucketlistController');
 
 // ── Overall Stats (Public + Authenticated) ──────────────────────────────────
 // GET    /api/bucketlist/stats              – get overall bucketlist stats

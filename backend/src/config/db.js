@@ -9,37 +9,79 @@ try {
   dns.setServers(['8.8.8.8', '1.1.1.1']);
 } catch (e) {}
 
-const MONGODB_URI =
-  process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/lifequest';
+let _connected = false;
+let _connecting = false;
 
-let isMongoConnected = false;
+async function connectMongo() {
+  if (mongoose.connection.readyState === 1) {
+    _connected = true;
+    return;
+  }
 
-// Connect to MongoDB if not already connecting or connected
-if (mongoose.connection.readyState === 0) {
-  mongoose
-    .connect(MONGODB_URI, {
+  if (mongoose.connection.readyState === 2) {
+    try {
+      await mongoose.connection.asPromise();
+      _connected = true;
+      return;
+    } catch (err) {
+      _connected = false;
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          `[MongoDB] Connection failed: ${err.message}\n` +
+          'Verify MONGODB_URI, network access, and IP whitelist on your MongoDB Atlas cluster.'
+        );
+      }
+      console.warn(`⚠️  [MongoDB] Connection failed (${err.message}) — using in-memory dev store.`);
+      return;
+    }
+  }
+
+  if (_connected || _connecting) return;
+  _connecting = true;
+
+  const uri = process.env.MONGODB_URI;
+
+  if (!uri) {
+    _connecting = false;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[MongoDB] MONGODB_URI is not set.\n' +
+        'Set MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/<dbname> in your environment variables.'
+      );
+    }
+    console.warn('⚠️  [MongoDB] MONGODB_URI not set — using in-memory dev store.');
+    return;
+  }
+
+  try {
+    await mongoose.connect(uri, {
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 30000,
-    })
-    .then(() => {
-      isMongoConnected = true;
-      console.log('✅ Connected to MongoDB database successfully.');
-    })
-    .catch((err) => {
-      isMongoConnected = false;
-      console.warn(`⚠️  MongoDB connection not established (${err.message}).`);
-      console.info('💡 Running with robust in-memory dev database store so all endpoints work immediately.');
-      console.info('👉 Set a valid MONGODB_URI in backend/.env to connect to your real MongoDB database or Atlas cluster.');
     });
+    _connected = true;
+    _connecting = false;
+    console.log('✅ Connected to MongoDB database successfully.');
+  } catch (err) {
+    _connecting = false;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        `[MongoDB] Connection failed: ${err.message}\n` +
+        'Verify MONGODB_URI, network access, and IP whitelist on your MongoDB Atlas cluster.'
+      );
+    }
+    console.warn(`⚠️  [MongoDB] Connection failed (${err.message}) — using in-memory dev store.`);
+  }
 }
 
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err.message);
-  isMongoConnected = false;
-});
+function isMongoConnected() {
+  return mongoose.connection.readyState === 1;
+}
 
-mongoose.connection.on('disconnected', () => {
-  isMongoConnected = false;
+mongoose.connection.on('connected', () => { _connected = true; });
+mongoose.connection.on('disconnected', () => { _connected = false; });
+mongoose.connection.on('error', (err) => {
+  _connected = false;
+  console.error('[MongoDB] Connection error:', err.message);
 });
 
 // In-Memory Dev Store Fallback
@@ -162,6 +204,7 @@ const inMemoryStore = {
 
 module.exports = {
   mongoose,
-  isMongoConnected: () => mongoose.connection.readyState === 1,
+  connectMongo,
+  isMongoConnected,
   inMemoryStore,
 };

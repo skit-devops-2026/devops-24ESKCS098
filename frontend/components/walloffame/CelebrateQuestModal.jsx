@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { saveAchievement } from '../bucketlist/storage';
+import { useAuth } from '../../context/AuthContext';
+const ACHIEVEMENTS_KEY = 'lifequest_walloffame_achievements_v1';
+function saveAchievement(achievement) {
+  try {
+    const raw = localStorage.getItem(ACHIEVEMENTS_KEY);
+    const existing = raw ? JSON.parse(raw) : [];
+    localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify([achievement, ...(Array.isArray(existing) ? existing : [])]));
+  } catch (e) {
+    // ignore storage quota or private browsing errors
+  }
+}
 
 const PHOTO_PRESETS = [
   {
@@ -45,6 +55,7 @@ const FRIENDS_LIST = [
 const CATEGORY_OPTIONS = ['ADVENTURE', 'TRAVEL', 'FITNESS', 'SKILLS', 'SQUAD', 'CUSTOM'];
 
 function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }) {
+  const { currentUser } = useAuth();
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [selectedSquad, setSelectedSquad] = useState(AVAILABLE_SQUADS[0]);
@@ -161,9 +172,9 @@ function CelebrateQuestModal({ isOpen, onClose, onPostAchievement, goal = null }
       category: resolvedCategory,
       badge: badgeText || 'Quest Conquered',
       badgeStyle: { background: '#ffed00', color: '#000000' },
-      name: 'Alex Rivero (You)',
+      name: currentUser?.name ? `${currentUser.name} (You)` : 'Adventurer (You)',
       subtitle: subtitle.trim() || (isSolo ? `Conquered "${title}" solo!` : `Conquered "${title}" with the squad!`),
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDGwAv94FtvOf1mF5L-lfyB9aCwx1UNQ9UZvMDaYLnF0Ur0kCnw2oaWvuL5NeYq7hKkBPahmlfZnsWDVUnb_znDz9i_h8AxB6MDwR0hueA2Huo7nCXAHNXPIwWABDmVo2czCGXfRAmsDWC4Gh60CGfArz2XGO6sgQ9mFBueM0TAcGb2xe77qz8PRvnZpGvKYAtnuvzTjW7I8qpgIXia-7OJ4_rmqjsTjHsM6xrQUyRJBtB4McTE6AR6',
+      avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
       image: imageUrl,
       likes: 1,
       hasLiked: true,

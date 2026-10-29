@@ -26,66 +26,15 @@ import SquadSidebar from '../components/sidebar/SquadSidebar';
 import GroupChallengeBanner from '../components/challenge/GroupChallengeBanner';
 import CreateSquadModal from '../components/squad/CreateSquadModal';
 import ProgressUpdateDrawer from '../components/bucketlist/ProgressUpdateDrawer';
-import QuestCompletionModal from '../components/celebration/QuestCompletionModal';
+import CelebrateQuestModal from '../components/walloffame/CelebrateQuestModal';
 import SquadMembersWidget from '../components/squad/SquadMembersWidget';
 
 import { STATUS_FILTERS } from '../components/bucketlist/constants';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
-const GUEST_DEMO_GOALS = [
-  {
-    id: 'guest-1',
-    title: 'Summit Mount Fuji at Sunrise 🏔️',
-    description: 'An epic 2-day trek to catch the dawn from the highest peak in Japan.',
-    category: 'ADVENTURE',
-    difficulty: 'hard',
-    visibility: 'public',
-    status: 'in-progress',
-    progress: 80,
-    priority: 'HIGH',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'guest-2',
-    title: 'Master 5 Authentic Pasta Recipes 🍝',
-    description: 'Weekly cooking workshops to make fresh carbonara and cacio e pepe from scratch.',
-    category: 'SKILLS',
-    difficulty: 'medium',
-    visibility: 'public',
-    status: 'not-started',
-    progress: 0,
-    priority: 'MEDIUM',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'guest-3',
-    title: 'Road Trip Through the Amalfi Coast 🚗',
-    description: '7 days, scenic cliffside curves, and coastal Mediterranean views.',
-    category: 'TRAVEL',
-    difficulty: 'easy',
-    visibility: 'public',
-    status: 'completed',
-    progress: 100,
-    priority: 'HIGH',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const GUEST_DEMO_SQUADS = [
-  {
-    id: 'guest-squad-1',
-    name: 'Trip Squad ✈️',
-    members: 6,
-    activeQuests: 3,
-    unreadCount: 0,
-    joinCode: 'LQ-TRIP',
-    avatar: null,
-    icon: '✈️',
-    bgColor: 'bg-brand-pink',
-    userRole: 'member',
-  },
-];
+// ── Dev configuration ──────────────────────────────────────────────────────────
+const DEV_USER_ID = 1;
 
 // ── Loading / Error skeleton ───────────────────────────────────────────────────
 
@@ -130,8 +79,8 @@ function ErrorState({ message, onRetry }) {
 // ── BucketList Page ────────────────────────────────────────────────────────────
 
 function BucketList() {
-  const { user, requireAuth } = useAuth();
-  const currentUserId = user?.id || null;
+  const { currentUser, isAuthenticated, openAuthModal } = useAuth();
+  const currentUserId = currentUser?.id || DEV_USER_ID;
 
   // ── Tab ──────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('personal');
@@ -181,17 +130,14 @@ function BucketList() {
 
   // ── Load squads ───────────────────────────────────────────────────────────
   const loadSquads = useCallback(async () => {
-    if (!user) {
-      setSquads(GUEST_DEMO_SQUADS);
-      if (!activeSquadId) {
-        setActiveSquadId(GUEST_DEMO_SQUADS[0].id);
-      }
+    if (!isAuthenticated) {
       setSquadsLoading(false);
+      setSquads([]);
       return;
     }
     setSquadsLoading(true);
     try {
-      const data = await api.getSquads();
+      const data = await api.getSquads({ devUserId: currentUserId });
       const BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
       const mapped = (data.squads || []).map((s, idx) => {
         const emojiMatch = (s.name || '').match(/(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
@@ -202,7 +148,7 @@ function BucketList() {
           members: s.members || 1,
           activeQuests: s.active_quests || 0,
           unreadCount: 0,
-          joinCode: s.join_code || s.joinCode || '',
+          joinCode: s.join_code,
           avatar: s.cover_url || null,
           icon,
           bgColor: s.bg_color || BG_COLORS[idx % BG_COLORS.length],
@@ -214,76 +160,66 @@ function BucketList() {
         setActiveSquadId(mapped[0].id);
       }
     } catch {
+      // Squad loading failure is not fatal — we just show an empty sidebar
       setSquads([]);
     } finally {
       setSquadsLoading(false);
     }
-  }, [user, activeSquadId]);
+  }, [isAuthenticated, currentUserId, activeSquadId]);
 
   // ── Load personal goals ───────────────────────────────────────────────────
   const loadPersonalGoals = useCallback(async () => {
-    if (!user) {
-      setGoals(GUEST_DEMO_GOALS);
+    if (!isAuthenticated) {
       setGoalsLoading(false);
+      setGoals([]);
       return;
     }
     setGoalsLoading(true);
     setGoalsError(null);
     try {
-      const data = await api.getPersonalGoals();
+      const data = await api.getPersonalGoals({ devUserId: currentUserId });
       setGoals(data.goals || []);
     } catch (err) {
       setGoalsError(err.message || 'Could not load your goals. Check backend connection.');
     } finally {
       setGoalsLoading(false);
     }
-  }, [user]);
+  }, [isAuthenticated, currentUserId]);
 
   // ── Load team goals for active squad ─────────────────────────────────────
   const loadTeamGoals = useCallback(async (squadId) => {
-    if (!squadId) return;
-    if (!user) {
-      setTeamGoals([
-        {
-          id: 'team-guest-1',
-          groupId: squadId,
-          title: 'Summit Mount Fuji Basecamp Trek 🏔️',
-          description: 'Team milestone challenge: 4 acclimatization hikes and summit sunrise climb.',
-          category: 'ADVENTURE',
-          difficulty: 'hard',
-          visibility: 'public',
-          status: 'in-progress',
-          progress: 80,
-          priority: 'HIGH',
-        },
-      ]);
-      setTeamGoalsLoading(false);
-      return;
-    }
+    if (!squadId || !isAuthenticated) return;
     setTeamGoalsLoading(true);
     setTeamGoalsError(null);
     try {
-      const data = await api.getTeamGoals(squadId);
+      const data = await api.getTeamGoals(squadId, { devUserId: currentUserId });
       setTeamGoals(data.goals || []);
     } catch (err) {
       setTeamGoalsError(err.message || 'Could not load team goals.');
     } finally {
       setTeamGoalsLoading(false);
     }
-  }, [user]);
+  }, [isAuthenticated, currentUserId]);
 
   // ── Initial fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
-    loadSquads();
-    loadPersonalGoals();
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isAuthenticated) {
+      loadSquads();
+      loadPersonalGoals();
+    } else {
+      setGoals([]);
+      setSquads([]);
+      setGoalsLoading(false);
+      setSquadsLoading(false);
+    }
+  }, [isAuthenticated, loadSquads, loadPersonalGoals]);
 
   // ── Load team goals whenever squad or tab changes ─────────────────────────
   useEffect(() => {
-    if (activeTab === 'team' && activeSquadId) {
+    if (isAuthenticated && activeTab === 'team' && activeSquadId) {
       loadTeamGoals(activeSquadId);
     }
-  }, [activeTab, activeSquadId, loadTeamGoals]);
+  }, [isAuthenticated, activeTab, activeSquadId, loadTeamGoals]);
 
   // ── Personal goal filtering ───────────────────────────────────────────────
   const filteredGoals = goals.filter((goal) => {
@@ -303,14 +239,10 @@ function BucketList() {
   // ── Handlers: Personal Goals ──────────────────────────────────────────────
 
   const handleAddGoal = async (goalData) => {
-    if (!user) {
-      requireAuth(() => handleAddGoal(goalData), { prompt: 'Log in or sign up to add a new quest to your bucket list!' });
-      return;
-    }
     if (submitting) return;
     setSubmitting(true);
     try {
-      const data = await api.createPersonalGoal(goalData);
+      const data = await api.createPersonalGoal(goalData, { devUserId: currentUserId });
       setGoals((prev) => [data.goal, ...prev]);
       setShowForm(false);
       setActiveFilter('all');
@@ -324,10 +256,6 @@ function BucketList() {
   };
 
   const handleUpdateGoal = async (updated) => {
-    if (!user) {
-      requireAuth(() => handleUpdateGoal(updated), { prompt: 'Log in to edit your quests!' });
-      return;
-    }
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -341,7 +269,8 @@ function BucketList() {
           visibility: updated.visibility,
           deadline: updated.deadline,
           priority: updated.priority,
-        }
+        },
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
@@ -361,17 +290,15 @@ function BucketList() {
   };
 
   const handleStatusUpdate = async (goalId, newStatus, progress) => {
-    if (!user) {
-      requireAuth(() => handleStatusUpdate(goalId, newStatus, progress), { prompt: 'Log in to update quest status!' });
-      return null;
-    }
     try {
       const data = await api.updateGoalStatus(
         goalId,
-        { status: newStatus, progress }
+        { status: newStatus, progress },
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
+      // Update selectedGoal if open
       setSelectedGoal((prev) => (prev && prev.id === saved.id ? saved : prev));
       return saved;
     } catch (err) {
@@ -381,14 +308,10 @@ function BucketList() {
   };
 
   const handleDeleteGoal = async (id) => {
-    if (!user) {
-      requireAuth(() => handleDeleteGoal(id), { prompt: 'Log in to delete this quest!' });
-      return;
-    }
     if (submitting) return;
     setSubmitting(true);
     try {
-      await api.deletePersonalGoal(id);
+      await api.deletePersonalGoal(id, { devUserId: currentUserId });
       setGoals((prev) => prev.filter((g) => g.id !== id));
       setSelectedGoal(null);
       showToast('🗑️ Goal deleted.');
@@ -400,10 +323,6 @@ function BucketList() {
   };
 
   const handleQuickStatus = async (id, newStatus) => {
-    if (!user) {
-      requireAuth(() => handleQuickStatus(id, newStatus), { prompt: 'Log in to update quest progress!' });
-      return;
-    }
     const progress =
       newStatus === 'completed' ? 100 : newStatus === 'not-started' ? 0 : undefined;
     const saved = await handleStatusUpdate(id, newStatus, progress);
@@ -413,10 +332,6 @@ function BucketList() {
   };
 
   const handleSaveProgress = async (updated, note) => {
-    if (!user) {
-      requireAuth(() => handleSaveProgress(updated, note), { prompt: 'Log in to record progress checkpoints!' });
-      return;
-    }
     const isTeam =
       Boolean(updated.isTeamGoal) ||
       Boolean(updated.groupId) ||
@@ -429,7 +344,8 @@ function BucketList() {
         const data = await api.updateTeamGoalStatus(
           targetSquadId,
           updated.id,
-          { status: updated.status, progress: updated.progress }
+          { status: updated.status, progress: updated.progress },
+          { devUserId: currentUserId }
         );
         const saved = data.goal;
 
@@ -438,7 +354,8 @@ function BucketList() {
             await api.updateMemberContribution(
               targetSquadId,
               updated.id,
-              { progress: updated.progress, note: note.trim() }
+              { progress: updated.progress, note: note.trim() },
+              { devUserId: currentUserId }
             );
           } catch (e) {
             console.warn('Could not record contribution note:', e);
@@ -469,20 +386,13 @@ function BucketList() {
   // ── Handlers: Squad ───────────────────────────────────────────────────────
 
   const handleCreateSquad = async (newSquadData) => {
-    if (!user) {
-      requireAuth(() => handleCreateSquad(newSquadData), { prompt: 'Log in or sign up to create your own squad!' });
-      return;
-    }
     if (submitting) return;
     setSubmitting(true);
     try {
-      const data = await api.createSquad({
-        name: newSquadData.name,
-        description: newSquadData.description || '',
-        joinCode: newSquadData.joinCode,
-        coverUrl: newSquadData.coverUrl,
-        isPrivate: newSquadData.isPrivate,
-      });
+      const data = await api.createSquad(
+        { name: newSquadData.name, description: newSquadData.description || '' },
+        { devUserId: currentUserId }
+      );
       const squad = data.squad;
       const BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
       const emojiMatch = (squad.name || '').match(/(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
@@ -493,7 +403,7 @@ function BucketList() {
         members: squad.members || 1,
         activeQuests: 0,
         unreadCount: 0,
-        joinCode: squad.join_code || squad.joinCode,
+        joinCode: squad.join_code,
         avatar: squad.cover_url || null,
         icon,
         bgColor: BG_COLORS[squads.length % BG_COLORS.length],
@@ -501,11 +411,10 @@ function BucketList() {
       };
       setSquads((prev) => [...prev, mapped]);
       setActiveSquadId(mapped.id);
-      showToast(`🎉 Squad "${squad.name}" created! Join code: ${mapped.joinCode}`);
-      return mapped;
+      showToast(`🎉 Squad "${squad.name}" created! Join code: ${squad.join_code}`);
+      setIsCreateSquadOpen(false);
     } catch (err) {
       showToast(`❌ Failed to create squad: ${err.message}`, 6000);
-      throw err;
     } finally {
       setSubmitting(false);
     }
@@ -513,14 +422,10 @@ function BucketList() {
 
   const handleJoinSquad = async (code) => {
     if (!code || !code.trim()) return;
-    if (!user) {
-      requireAuth(() => handleJoinSquad(code), { prompt: 'Log in or sign up to join a squad!' });
-      return;
-    }
     setJoinLoading(true);
     setJoinError(null);
     try {
-      const data = await api.joinSquad(code.trim());
+      const data = await api.joinSquad(code.trim(), { devUserId: currentUserId });
       const squad = data.squad;
       const BG_COLORS = ['bg-brand-pink', 'bg-brand-cyan', 'bg-brand-lime', 'bg-brand-yellow', 'bg-brand-purple'];
       const emojiMatch = (squad.name || '').match(/(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
@@ -531,7 +436,7 @@ function BucketList() {
         members: squad.members || 1,
         activeQuests: squad.active_quests || 0,
         unreadCount: 0,
-        joinCode: squad.join_code || squad.joinCode,
+        joinCode: squad.join_code,
         avatar: squad.cover_url || null,
         icon,
         bgColor: BG_COLORS[squads.length % BG_COLORS.length],
@@ -546,30 +451,18 @@ function BucketList() {
       setJoinCodeInput('');
       setJoinError(null);
       showToast(data.message || `🎉 Joined ${squad.name}!`);
-      setIsCreateSquadOpen(false);
-      if (activeTab === 'team') {
-        loadTeamGoals(mapped.id);
-      }
-      return mapped;
     } catch (err) {
-      const errMsg = err.message || 'Invalid join code. Please try again.';
-      setJoinError(errMsg);
-      showToast(`❌ ${errMsg}`, 6000);
-      throw err;
+      setJoinError(err.message || 'Invalid join code. Please try again.');
     } finally {
       setJoinLoading(false);
     }
   };
 
   const handleLeaveSquad = async (squadId) => {
-    if (!user) {
-      requireAuth(() => handleLeaveSquad(squadId), { prompt: 'Log in to manage squad memberships!' });
-      return;
-    }
     if (submitting) return;
     setSubmitting(true);
     try {
-      await api.leaveSquad(squadId);
+      await api.leaveSquad(squadId, { devUserId: currentUserId });
       const remaining = squads.filter((s) => s.id !== squadId);
       setSquads(remaining);
       setActiveSquadId(remaining.length > 0 ? remaining[0].id : null);
@@ -586,13 +479,9 @@ function BucketList() {
 
   const handleAddTeamGoal = async (goalData) => {
     if (!activeSquadId || submitting) return;
-    if (!user) {
-      requireAuth(() => handleAddTeamGoal(goalData), { prompt: 'Log in to create team goals for your squad!' });
-      return;
-    }
     setSubmitting(true);
     try {
-      const data = await api.createTeamGoal(activeSquadId, goalData);
+      const data = await api.createTeamGoal(activeSquadId, goalData, { devUserId: currentUserId });
       setTeamGoals((prev) => [data.goal, ...prev]);
       showToast(`✅ Team goal "${data.goal.title}" created!`);
     } catch (err) {
@@ -604,10 +493,6 @@ function BucketList() {
 
   const handleUpdateTeamGoal = async (updated) => {
     if (!activeSquadId || submitting) return;
-    if (!user) {
-      requireAuth(() => handleUpdateTeamGoal(updated), { prompt: 'Log in to edit squad goals!' });
-      return;
-    }
     setSubmitting(true);
     try {
       const data = await api.updateTeamGoal(
@@ -620,7 +505,8 @@ function BucketList() {
           difficulty: updated.difficulty,
           deadline: updated.deadline,
           priority: updated.priority,
-        }
+        },
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setTeamGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
@@ -637,15 +523,12 @@ function BucketList() {
 
   const handleUpdateTeamGoalStatus = async (goalId, newStatus, progress) => {
     if (!activeSquadId) return;
-    if (!user) {
-      requireAuth(() => handleUpdateTeamGoalStatus(goalId, newStatus, progress), { prompt: 'Log in to update squad goal status!' });
-      return;
-    }
     try {
       const data = await api.updateTeamGoalStatus(
         activeSquadId,
         goalId,
-        { status: newStatus, progress }
+        { status: newStatus, progress },
+        { devUserId: currentUserId }
       );
       const saved = data.goal;
       setTeamGoals((prev) => prev.map((g) => (g.id === saved.id ? saved : g)));
@@ -656,13 +539,9 @@ function BucketList() {
 
   const handleDeleteTeamGoal = async (id) => {
     if (!activeSquadId || submitting) return;
-    if (!user) {
-      requireAuth(() => handleDeleteTeamGoal(id), { prompt: 'Log in to delete team goals!' });
-      return;
-    }
     setSubmitting(true);
     try {
-      await api.deleteTeamGoal(activeSquadId, id);
+      await api.deleteTeamGoal(activeSquadId, id, { devUserId: currentUserId });
       setTeamGoals((prev) => prev.filter((g) => g.id !== id));
       showToast('🗑️ Team goal deleted.');
     } catch (err) {
@@ -673,10 +552,6 @@ function BucketList() {
   };
 
   const handleTeamQuickStatus = async (id, newStatus) => {
-    if (!user) {
-      requireAuth(() => handleTeamQuickStatus(id, newStatus), { prompt: 'Log in to log squad progress!' });
-      return;
-    }
     const progress = newStatus === 'completed' ? 100 : newStatus === 'not-started' ? 0 : undefined;
     await handleUpdateTeamGoalStatus(id, newStatus, progress);
   };
@@ -734,24 +609,80 @@ function BucketList() {
       `}</style>
 
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-12 flex gap-8">
-        {/* Sidebar: Squad Switcher + Category Filters */}
-        <aside className="hidden lg:block w-72 shrink-0">
-          <div className="sticky top-24">
-            <SquadSidebar
-              squads={squads}
-              activeSquadId={activeSquadId}
-              onSelectSquad={(id) => {
-                setActiveSquadId(id);
-                if (activeTab === 'team') loadTeamGoals(id);
-              }}
-              selectedCategory={activeCategory === 'all' ? null : activeCategory}
-              onSelectCategory={(cat) => setActiveCategory(cat || 'all')}
-              onAddGroupClick={() => requireAuth(() => setIsCreateSquadOpen(true), { prompt: 'Log in or sign up to create your own squad!' })}
-            />
-          </div>
-        </aside>
+        {!isAuthenticated ? (
+          <div className="flex-1 py-10">
+            <div className="bg-brand-canvas brutal-border-lg rounded-2xl shadow-brutal-xl p-8 md:p-14 text-center max-w-2xl mx-auto space-y-6">
+              <div className="w-20 h-20 bg-brand-yellow brutal-border rounded-2xl shadow-brutal flex items-center justify-center mx-auto text-4xl -rotate-3">
+                🎒
+              </div>
+              <div className="space-y-2">
+                <span className="font-mono text-xs font-black uppercase tracking-wider bg-black text-brand-yellow px-3 py-1 rounded inline-block">
+                  PASSPORT REQUIRED ⚡
+                </span>
+                <h1 className="font-display font-black text-3xl md:text-5xl uppercase tracking-tight text-neutral-900">
+                  Your Bucket List Awaits
+                </h1>
+                <p className="font-hanken text-base text-neutral-700 max-w-md mx-auto">
+                  Create your personal dream board, join adventure squads, level up your XP, and conquer life milestones with friends.
+                </p>
+              </div>
 
-        <div className="flex-1 space-y-8">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-left">
+                <div className="p-4 bg-white brutal-border-sm rounded-xl shadow-brutal-sm">
+                  <span className="text-2xl mb-1 block">🎯</span>
+                  <h4 className="font-space font-black text-xs uppercase">Track Goals</h4>
+                  <p className="font-hanken text-xs text-neutral-600 mt-1">From Mt. Fuji sunrise to learning guitar.</p>
+                </div>
+                <div className="p-4 bg-white brutal-border-sm rounded-xl shadow-brutal-sm">
+                  <span className="text-2xl mb-1 block">🤝</span>
+                  <h4 className="font-space font-black text-xs uppercase">Squad Challenges</h4>
+                  <p className="font-hanken text-xs text-neutral-600 mt-1">Conquer epic team quests together.</p>
+                </div>
+                <div className="p-4 bg-white brutal-border-sm rounded-xl shadow-brutal-sm">
+                  <span className="text-2xl mb-1 block">🏆</span>
+                  <h4 className="font-space font-black text-xs uppercase">Wall of Fame</h4>
+                  <p className="font-hanken text-xs text-neutral-600 mt-1">Celebrate completions with proof & reactions.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('signup')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-brand-yellow hover:bg-[#ffe600] active:translate-x-0.5 active:translate-y-0.5 text-black font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all"
+                >
+                  Mint Free Passport ➔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('login')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-black hover:bg-neutral-800 active:translate-x-0.5 active:translate-y-0.5 text-white font-space font-black uppercase text-sm brutal-border rounded-xl shadow-brutal hover:shadow-brutal-lg transition-all"
+                >
+                  Sign In
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Sidebar: Squad Switcher + Category Filters */}
+            <aside className="hidden lg:block w-72 shrink-0">
+              <div className="sticky top-24">
+                <SquadSidebar
+                  squads={squads}
+                  activeSquadId={activeSquadId}
+                  onSelectSquad={(id) => {
+                    setActiveSquadId(id);
+                    if (activeTab === 'team') loadTeamGoals(id);
+                  }}
+                  selectedCategory={activeCategory === 'all' ? null : activeCategory}
+                  onSelectCategory={(cat) => setActiveCategory(cat || 'all')}
+                  onAddGroupClick={() => setIsCreateSquadOpen(true)}
+                />
+              </div>
+            </aside>
+
+            <div className="flex-1 space-y-8">
           {/* Toast */}
           {toastMessage && (
             <div className="p-4 bg-brand-yellow brutal-border-lg rounded-xl shadow-brutal flex items-center justify-between font-mono text-xs font-black animate-in slide-in-from-top-4">
@@ -766,39 +697,6 @@ function BucketList() {
               >
                 ✕
               </button>
-            </div>
-          )}
-
-          {/* Guest Browsing Notification Banner */}
-          {!user && (
-            <div className="bg-[#ffed00] border-3 border-black rounded-xl p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in">
-              <div className="flex items-center gap-3">
-                <span className="text-3xl">🌟</span>
-                <div>
-                  <h3 className="font-bricolage font-black text-sm uppercase text-black">
-                    Browsing as Guest
-                  </h3>
-                  <p className="font-hanken text-xs text-black/80 font-medium">
-                    You're viewing preview quests. Log in or create a free account to track your real bucket list and squads!
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => requireAuth(null, { prompt: 'Log in to track your personal quests', tab: 'login' })}
-                  className="px-4 py-2 bg-black text-white font-space font-bold text-xs uppercase rounded-lg border-2 border-black hover:-translate-y-0.5 transition-all cursor-pointer"
-                >
-                  Log In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => requireAuth(null, { prompt: 'Sign up to start your LifeQuest journey', tab: 'signup' })}
-                  className="px-4 py-2 bg-[#e4006c] text-white font-space font-bold text-xs uppercase rounded-lg border-2 border-black hover:-translate-y-0.5 transition-all cursor-pointer"
-                >
-                  Sign Up Free
-                </button>
-              </div>
             </div>
           )}
 
@@ -850,22 +748,18 @@ function BucketList() {
             {squadView === 'challenge' ? (
               <GroupChallengeBanner
                 onLogCheckpoint={() => {
-                  requireAuth(() => {
-                    const activeGoal = goals.find((g) => g.status === 'in-progress') || goals[0] || {
-                      id: 'challenge-mt-fuji',
-                      title: 'Summit Mount Fuji at Sunrise 🏔️',
-                      description: 'Shared milestone challenge! Complete collective altitude checkpoints, gear prep checks, and endurance runs.',
-                      category: 'ADVENTURE',
-                      progress: 80,
-                      status: 'in-progress',
-                    };
-                    setDrawerGoal(activeGoal);
-                  }, { prompt: 'Log in to record your squad checkpoints!' });
+                  const activeGoal = goals.find((g) => g.status === 'in-progress') || goals[0] || {
+                    id: 'challenge-mt-fuji',
+                    title: 'Summit Mount Fuji at Sunrise 🏔️',
+                    description: 'Shared milestone challenge! Complete collective altitude checkpoints, gear prep checks, and endurance runs.',
+                    category: 'ADVENTURE',
+                    progress: 80,
+                    status: 'in-progress',
+                  };
+                  setDrawerGoal(activeGoal);
                 }}
                 onOpenDiscussion={() => {
-                  requireAuth(() => {
-                    showToast('💬 Squad discussion thread opened for Mt. Fuji summit quest!', 4000);
-                  }, { prompt: 'Log in to join squad discussions!' });
+                  showToast('💬 Squad discussion thread opened for Mt. Fuji summit quest!', 4000);
                 }}
               />
             ) : (
@@ -874,7 +768,7 @@ function BucketList() {
                 category="ADVENTURE"
                 motto="Tackle shared goals, track progress together, and celebrate as a team."
                 joinCode={currentSquad?.joinCode || currentSquad?.join_code || ''}
-                onInvite={() => requireAuth(() => setIsCreateSquadOpen(true), { prompt: 'Log in to invite teammates to this squad!' })}
+                onInvite={() => setIsCreateSquadOpen(true)}
                 onLeave={() => {
                   if (currentSquad?.id) {
                     handleLeaveSquad(currentSquad.id);
@@ -919,7 +813,7 @@ function BucketList() {
                   </p>
                   {goals.length === 0 && (
                     <div className="flex justify-center">
-                      <AddGoalCard onClick={() => requireAuth(() => setShowForm(true), { prompt: 'Log in or sign up to create your first quest!' })} />
+                      <AddGoalCard onClick={() => setShowForm(true)} />
                     </div>
                   )}
                 </div>
@@ -933,7 +827,7 @@ function BucketList() {
                       onQuickStatus={handleQuickStatus}
                     />
                   ))}
-                  <AddGoalCard onClick={() => requireAuth(() => setShowForm(true), { prompt: 'Log in or sign up to add a new quest!' })} />
+                  <AddGoalCard onClick={() => setShowForm(true)} />
                 </div>
               )}
 
@@ -1013,7 +907,7 @@ function BucketList() {
                       id="team-join-squad-btn"
                       disabled={joinLoading || !joinCodeInput.trim()}
                       onClick={() => handleJoinSquad(joinCodeInput)}
-                      className="bg-black text-white font-space font-bold text-xs px-4 py-2 rounded-lg border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50 cursor-pointer"
+                      className="bg-black text-white font-space font-bold text-xs px-4 py-2 rounded-lg border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50"
                     >
                       {joinLoading ? '...' : 'Join'}
                     </button>
@@ -1032,8 +926,8 @@ function BucketList() {
                 <button
                   type="button"
                   id="team-create-squad-btn"
-                  onClick={() => requireAuth(() => setIsCreateSquadOpen(true), { prompt: 'Log in or sign up to create a new squad!' })}
-                  className="bg-brand-yellow border-2 border-black rounded-lg px-6 py-3 font-space font-bold text-sm shadow-brutal hover:-translate-y-0.5 transition-all cursor-pointer"
+                  onClick={() => setIsCreateSquadOpen(true)}
+                  className="bg-brand-yellow border-2 border-black rounded-lg px-6 py-3 font-space font-bold text-sm shadow-brutal hover:-translate-y-0.5 transition-all"
                 >
                   + Create a New Squad
                 </button>
@@ -1041,7 +935,9 @@ function BucketList() {
             )
           )}
         </div>
-      </main>
+      </>
+    )}
+  </main>
 
       {/* Create Squad Modal */}
       <CreateSquadModal
@@ -1064,27 +960,12 @@ function BucketList() {
       />
 
       {/* Quest Completion Celebration Modal */}
-      <QuestCompletionModal
+      <CelebrateQuestModal
         isOpen={Boolean(celebrateGoal)}
         goal={celebrateGoal}
         onClose={() => setCelebrateGoal(null)}
-        onPostAchievement={async (achievement) => {
-          try {
-            const payload = {
-              title: achievement.title || celebrateGoal?.title || 'Conquered Quest',
-              subtitle: achievement.subtitle || (celebrateGoal?.description ? `Conquered "${celebrateGoal.title}"!` : 'Conquered quest with the squad!'),
-              category: achievement.category || celebrateGoal?.category || 'ADVENTURE',
-              image_url: achievement.image || 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=80',
-              xp_earned: achievement.xpEarned || 250,
-              badge: achievement.badge || 'Quest Conquered 🏆',
-              squad_id: celebrateGoal?.groupId || null,
-              is_public: true,
-            };
-            await api.createPost(payload);
-            showToast(`🎉 Quest published to the Wall of Fame! (+${payload.xp_earned} XP)`);
-          } catch (err) {
-            showToast(`🎉 Quest marked as completed! (+${achievement.xpEarned || 250} XP)`);
-          }
+        onPostAchievement={(achievement) => {
+          showToast(`🎉 Quest "${achievement.badge}" posted to Wall of Fame! (+${achievement.xpEarned} XP)`);
         }}
       />
     </>

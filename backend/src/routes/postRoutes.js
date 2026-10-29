@@ -3,12 +3,14 @@ const router = express.Router();
 const postController = require('../controllers/postController');
 const reactionController = require('../controllers/reactionController');
 const commentController = require('../controllers/commentController');
-const { auth, optionalAuth } = require('../middleware/auth');
+const { auth, authMiddleware, optionalAuth } = require('../middleware/auth');
 
-// Posts Feed & CRUD
+// Posts Feed & Stats (Public / Guest readable with optionalAuth)
 router.get('/', optionalAuth, postController.getFeed);
-router.post('/', auth, postController.createPost);
 router.get('/stats/weekly', optionalAuth, postController.getWeeklyStats);
+
+// Write actions require full authentication
+router.post('/', auth, postController.createPost);
 router.patch('/:id/visibility', auth, postController.updateVisibility);
 router.delete('/:id', auth, postController.deletePost);
 
@@ -21,4 +23,3 @@ router.get('/:id/comments', optionalAuth, commentController.getComments);
 router.post('/:id/comments', auth, commentController.addComment);
 
 module.exports = router;
-

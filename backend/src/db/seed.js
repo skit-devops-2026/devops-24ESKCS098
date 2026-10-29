@@ -9,7 +9,7 @@ try {
   dns.setServers(['8.8.8.8', '1.1.1.1']);
 } catch (e) {}
 
-const { User, Group, Item, Post, Comment, Reaction, Badge } = require('../models');
+const { User, Group, Goal, Post, Comment, Reaction, Badge } = require('../models');
 
 const MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/lifequest';
@@ -229,11 +229,10 @@ const initialBadges = [
   },
 ];
 
-const initialItems = [
+const initialGoals = [
   {
-    id: 101,
-    owner_id: 1,
-    group_id: 1,
+    ownerId: 1,
+    groupId: 1,
     title: 'Climb Mt. Fuji Sunrise Summit',
     description: 'Hike overnight via Yoshida Trail to watch the Goraiko sunrise.',
     category: 'ADVENTURE',
@@ -245,9 +244,8 @@ const initialItems = [
     deadline: new Date('2026-11-20'),
   },
   {
-    id: 102,
-    owner_id: 1,
-    group_id: null,
+    ownerId: 1,
+    groupId: null,
     title: 'Learn Spanish B1 Conversational Level',
     description: 'Complete 90 days streak on Spanish practice app.',
     category: 'SKILLS',
@@ -259,9 +257,8 @@ const initialItems = [
     deadline: new Date('2026-12-31'),
   },
   {
-    id: 103,
-    owner_id: 1,
-    group_id: 1,
+    ownerId: 1,
+    groupId: 1,
     title: 'Scuba Diving at Great Barrier Reef',
     description: 'Get PADI Open Water certified and dive outer reef coral.',
     category: 'TRAVEL',
@@ -273,9 +270,8 @@ const initialItems = [
     deadline: new Date('2027-02-15'),
   },
   {
-    id: 104,
-    owner_id: 1,
-    group_id: 3,
+    ownerId: 1,
+    groupId: 3,
     title: 'Run a Sub-20 Minute 5K',
     description: 'Interval speedwork 3x weekly and tempo sessions.',
     category: 'FITNESS',
@@ -394,7 +390,7 @@ async function seedDatabase() {
     await Promise.all([
       User.deleteMany({}),
       Group.deleteMany({}),
-      Item.deleteMany({}),
+      Goal.deleteMany({}),
       Post.deleteMany({}),
       Comment.deleteMany({}),
       Reaction.deleteMany({}),
@@ -405,7 +401,7 @@ async function seedDatabase() {
     await User.insertMany(initialUsers);
     await Group.insertMany(initialGroups);
     await Badge.insertMany(initialBadges);
-    await Item.insertMany(initialItems);
+    await Goal.insertMany(initialGoals);
     await Post.insertMany(initialPosts);
     await Reaction.insertMany(initialReactions);
     await Comment.insertMany(initialComments);

@@ -21,12 +21,20 @@ async function getLeaderboard(req, res, next) {
     if (isMongoConnected()) {
       const periodStart = getPeriodStartDate(period);
 
+<<<<<<< HEAD
+      // Find user's squads or default squads for guests
+      const userGroups = userId
+        ? await Group.find({ 'members.user_id': userId }).lean()
+        : await Group.find({}).lean();
+      let targetGroupIds = userGroups.map((g) => g.id);
+=======
       // Find relevant squads: if userId is present, find user's squads; otherwise find public/recent squads
       const groupFilter = userId
         ? { $or: [{ 'members.user_id': userId }, { 'members.userId': userId }] }
         : {};
       const userGroups = await Group.find(groupFilter).limit(20).lean();
       let targetGroupIds = userGroups.map((g) => g.id || g._id);
+>>>>>>> main
       if (groupId) {
         targetGroupIds = targetGroupIds.filter((id) => String(id) === String(groupId));
       }
@@ -177,6 +185,9 @@ async function getLeaderboard(req, res, next) {
       }
 
       const topRankings = allRankings.slice(0, limit);
+<<<<<<< HEAD
+      const myRow = userId ? allRankings.find((r) => r.isCurrentUser) : null;
+=======
       const myRow = userId
         ? (allRankings.find((r) => r.isCurrentUser) || {
             rank: allRankings.length + 1,
@@ -188,16 +199,19 @@ async function getLeaderboard(req, res, next) {
             xp: 0,
             name: 'Guest Quester',
           };
+>>>>>>> main
 
       return res.json({
         success: true,
         period,
         top: topRankings,
-        me: {
-          rank: myRow.rank,
-          xp: myRow.xp,
-          name: myRow.name,
-        },
+        me: myRow
+          ? {
+              rank: myRow.rank,
+              xp: myRow.xp,
+              name: myRow.name,
+            }
+          : null,
       });
     }
 
@@ -319,17 +333,19 @@ async function getLeaderboard(req, res, next) {
     }
 
     const top = ranked.slice(0, limit);
-    const myRow = ranked.find((r) => r.isCurrentUser) || { rank: 2, xp: baseScores[1].xp, name: 'Alex Rivero' };
+    const myRow = userId ? ranked.find((r) => r.isCurrentUser) : null;
 
     res.json({
       success: true,
       period,
       top,
-      me: {
-        rank: myRow.rank,
-        xp: myRow.xp,
-        name: myRow.name,
-      },
+      me: myRow
+        ? {
+            rank: myRow.rank,
+            xp: myRow.xp,
+            name: myRow.name,
+          }
+        : null,
     });
   } catch (err) {
     next(err);
