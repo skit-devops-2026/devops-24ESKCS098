@@ -22,6 +22,7 @@ const CURATED_AVATARS = [
   'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&q=80',
 ];
 
+// Generates a deterministic avatar so guests/new users have consistent portraits
 function getStableAvatar(seedStr) {
   let hash = 0;
   for (let i = 0; i < (seedStr || '').length; i++) {
@@ -31,9 +32,7 @@ function getStableAvatar(seedStr) {
   return CURATED_AVATARS[Math.abs(hash) % CURATED_AVATARS.length];
 }
 
-/**
- * Format user for API response, stripping sensitive data like password_hash.
- */
+// Strip password hash and internal mongoose fields before responding
 function sanitizeUser(user) {
   const obj = user && typeof user.toObject === 'function' ? user.toObject() : { ...(user || {}) };
   delete obj.password_hash;
@@ -53,9 +52,6 @@ function sanitizeUser(user) {
   };
 }
 
-/**
- * Generate a JWT token for a user.
- */
 function signToken(user) {
   return jwt.sign(
     {
@@ -69,25 +65,21 @@ function signToken(user) {
   );
 }
 
-/**
- * Verify password against stored hash (supports bcrypt, scrypt salt:hash, and demo seed passwords).
- */
+// Support both bcrypt and scrypt salt:hash formats during transition, plus seeded dev logins
 async function verifyPassword(password, storedHash) {
   if (!storedHash) {
     return password === 'password123' || password === 'alex123' || password === 'admin123';
   }
 
-  // 1. Try bcrypt
   if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$')) {
     try {
       const match = await bcrypt.compare(password, storedHash);
       if (match) return true;
     } catch {
-      // ignore
+      // pass through
     }
   }
 
-  // 2. Try crypto scrypt salt:hash
   if (storedHash.includes(':')) {
     try {
       const [salt, key] = storedHash.split(':');
@@ -95,11 +87,11 @@ async function verifyPassword(password, storedHash) {
       const derivedKey = crypto.scryptSync(password, salt, 64);
       if (crypto.timingSafeEqual(keyBuffer, derivedKey)) return true;
     } catch {
-      // ignore
+      // pass through
     }
   }
 
-  // 3. Fallback demo password for seeded development users
+  // Seeded demo accounts in local dev environment
   if (password === 'password123' || password === 'alex123' || password === 'admin123') {
     return true;
   }
@@ -107,18 +99,12 @@ async function verifyPassword(password, storedHash) {
   return false;
 }
 
-/**
- * Hash password securely.
- */
 async function hashPassword(password) {
   const salt = await bcrypt.genSalt(10);
   return bcrypt.hash(password, salt);
 }
 
-/**
- * POST /api/auth/signup & POST /api/auth/register
- * Unified registration endpoint
- */
+// User signup / registration
 async function signup(req, res, next) {
   try {
     const { name, email, password, vibe, avatar_url } = req.body;
@@ -147,7 +133,6 @@ async function signup(req, res, next) {
     const normalizedEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
 
-    // Check duplicate email
     if (isMongoConnected()) {
       const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
@@ -192,7 +177,7 @@ async function signup(req, res, next) {
         avatar_url: chosenAvatar,
         bio: userVibe ? `${userVibe} Enthusiast` : 'LifeQuest Explorer',
         vibe: userVibe,
-        xp: 250, // Welcome bonus XP
+        xp: 250, // Starter XP reward
         created_at: new Date(),
       });
 
@@ -245,10 +230,7 @@ async function signup(req, res, next) {
   }
 }
 
-/**
- * POST /api/auth/login
- * Authenticate user with email and password.
- */
+// User authentication
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
@@ -302,10 +284,7 @@ async function login(req, res, next) {
   }
 }
 
-/**
- * GET /api/auth/me
- * Get current authenticated user profile.
- */
+// Current session profile
 async function getMe(req, res, next) {
   try {
     const userId = req.user.id;
@@ -344,10 +323,7 @@ async function getMe(req, res, next) {
   }
 }
 
-/**
- * POST /api/auth/logout
- * Stateless token logout endpoint.
- */
+// Stateless logout confirmation
 async function logout(req, res) {
   return res.status(200).json({
     success: true,

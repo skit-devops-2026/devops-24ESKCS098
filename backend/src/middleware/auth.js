@@ -4,12 +4,7 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lifequest_secret_key_2026';
 
-/**
- * Authentication Middleware:
- * Verifies JWT Bearer tokens on protected API routes and derives
- * authenticated user ID from the verified token.
- * Rejects unauthenticated requests with 401.
- */
+// Mandatory authentication guard for protected write endpoints
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
 
@@ -33,7 +28,7 @@ function authMiddleware(req, res, next) {
     }
   }
 
-  // Explicit dev testing header only (for CLI test suites)
+  // Developer convenience header for automated test runs
   if (req.headers['x-dev-user-id']) {
     const devUserId = parseInt(req.headers['x-dev-user-id'], 10) || 1;
     req.user = {
@@ -50,11 +45,7 @@ function authMiddleware(req, res, next) {
   });
 }
 
-/**
- * Optional Authentication Middleware
- * Populates req.user if a valid token is provided, but allows guest access (req.user = null)
- * for public reading of community feeds and leaderboards.
- */
+// Non-blocking auth for public endpoints (feed, leaderboard, public stats)
 function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
@@ -71,7 +62,7 @@ function optionalAuth(req, res, next) {
         };
         return next();
       } catch (err) {
-        // Soft fallback for optional routes: treat as guest
+        // Expired or bad token; allow request to continue as guest
         req.user = null;
         return next();
       }

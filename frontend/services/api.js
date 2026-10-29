@@ -262,9 +262,7 @@ export const api = {
     });
   },
 
-  // ── Team Goals ──────────────────────────────────────────────────────────────
-
-  /** Fetch team goals for a specific squad. */
+  // Team goals
   getTeamGoals: async (squadId, { status, category, devUserId } = {}) => {
     const params = new URLSearchParams();
     if (status && status !== 'all') params.set('status', status);
@@ -275,7 +273,6 @@ export const api = {
     });
   },
 
-  /** Create a team goal inside a squad. */
   createTeamGoal: async (squadId, goalData, { devUserId } = {}) => {
     return request(`/bucketlist/squads/${squadId}/goals`, {
       method: 'POST',
@@ -284,7 +281,6 @@ export const api = {
     });
   },
 
-  /** Update a team goal's fields (creator only). */
   updateTeamGoal: async (squadId, goalId, goalData, { devUserId } = {}) => {
     return request(`/bucketlist/squads/${squadId}/goals/${goalId}`, {
       method: 'PUT',
@@ -293,7 +289,6 @@ export const api = {
     });
   },
 
-  /** Update status/progress of a team goal (any squad member). */
   updateTeamGoalStatus: async (squadId, goalId, { status, progress }, { devUserId } = {}) => {
     return request(`/bucketlist/squads/${squadId}/goals/${goalId}/status`, {
       method: 'PATCH',
@@ -302,7 +297,6 @@ export const api = {
     });
   },
 
-  /** Delete a team goal (creator only). */
   deleteTeamGoal: async (squadId, goalId, { devUserId } = {}) => {
     return request(`/bucketlist/squads/${squadId}/goals/${goalId}`, {
       method: 'DELETE',
@@ -310,11 +304,7 @@ export const api = {
     });
   },
 
-  /**
-   * Update the current user's individual contribution toward a team goal.
-   * This records per-member progress without overwriting other members' data.
-   * The backend recalculates the overall goal progress from all contributions.
-   */
+  // Save current user's individual contribution toward a squad goal
   updateMemberContribution: async (squadId, goalId, { progress, note }, { devUserId } = {}) => {
     return request(`/bucketlist/squads/${squadId}/goals/${goalId}/contribution`, {
       method: 'PATCH',

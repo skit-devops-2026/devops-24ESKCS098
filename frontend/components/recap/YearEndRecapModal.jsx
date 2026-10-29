@@ -26,15 +26,8 @@ const RECAP_DATA = {
 };
 
 /**
- * Step 12: YearEndRecapModal (Item 12 from Stitch Design System)
- *
- * Spotify-Wrapped style viral annual recap modal.
- * Features:
- *   - Tabbed narrative slides: 'Snapshot', 'Vibe DNA', 'Top Squad', 'Golden Memory'
- *   - Offset pop-art polaroid frames & Neo-Brutalist sticker badges
- *   - Category distribution progress breakdown
- *   - Social sharing actions: Copy Link, Download Snapshot, Share to Story
- *   - Rendered via createPortal(..., document.body)
+ * Yearly retrospective modal showcasing milestone highlights, squad achievements,
+ * and personal quester stats in a slide-by-slide recap.
  */
 function YearEndRecapModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('SNAPSHOT'); // 'SNAPSHOT' | 'VIBE_DNA' | 'SQUAD' | 'MEMORY'
